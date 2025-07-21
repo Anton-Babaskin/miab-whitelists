@@ -1,0 +1,37 @@
+#!/bin/bash
+
+set -e
+
+DOMAIN="$1"
+if [[ -z "$DOMAIN" ]]; then
+  echo "❌ Укажи домен: add_2_whitelist.sh example.com"
+  exit 1
+fi
+
+POSTFIX_FILE="/etc/postfix/client_whitelist"
+POSTGREY_FILE="/etc/postgrey/whitelist_clients.local"
+
+# Бэкапы
+cp "$POSTFIX_FILE" "${POSTFIX_FILE}.bak_$(date +%F_%T)"
+cp "$POSTGREY_FILE" "${POSTGREY_FILE}.bak_$(date +%F_%T)"
+
+# Добавление в Postfix
+if ! grep -q "^$DOMAIN" "$POSTFIX_FILE"; then
+  echo "$DOMAIN OK" >> "$POSTFIX_FILE"
+  echo "✅ Добавлено в Postfix whitelist"
+else
+  echo "ℹ️ Уже есть в Postfix"
+fi
+
+# Добавление в Postgrey
+if ! grep -q "^$DOMAIN" "$POSTGREY_FILE"; then
+  echo "$DOMAIN" >> "$POSTGREY_FILE"
+  echo "✅ Добавлено в Postgrey whitelist"
+else
+  echo "ℹ️ Уже есть в Postgrey"
+fi
+
+# Обновление и рестарт
+postmap "$POSTFIX_FILE"
+systemctl restart postfix
+systemctl restart postgrey
