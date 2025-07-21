@@ -15,6 +15,6 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@v2
+        uses: ludeeus/action-shellcheck@v1
         with:
           args: add_whitelists.sh
