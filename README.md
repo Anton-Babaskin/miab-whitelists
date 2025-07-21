@@ -159,3 +159,5 @@ Please follow the standard fork → branch → PR workflow.
 ## 📜 License
 
 MIT © Anton Babaskin. See [LICENSE](LICENSE) for details.
+![ShellCheck](https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml/badge.svg)
+
