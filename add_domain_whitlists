@@ -1,37 +1,42 @@
 #!/bin/bash
 
-set -e
+set -e  # Exit on any error
 
-DOMAIN="$1"
-if [[ -z "$DOMAIN" ]]; then
-  echo "❌ Укажи домен: add_2_whitelist.sh example.com"
+TARGET="$1"
+if [[ -z "$TARGET" ]]; then
+  echo "❌ Usage: add_to_whitelist.sh <domain-or-IP>"
   exit 1
 fi
 
 POSTFIX_FILE="/etc/postfix/client_whitelist"
 POSTGREY_FILE="/etc/postgrey/whitelist_clients.local"
 
-# Бэкапы
+# --- Create backups ---
 cp "$POSTFIX_FILE" "${POSTFIX_FILE}.bak_$(date +%F_%T)"
 cp "$POSTGREY_FILE" "${POSTGREY_FILE}.bak_$(date +%F_%T)"
 
-# Добавление в Postfix
-if ! grep -q "^$DOMAIN" "$POSTFIX_FILE"; then
-  echo "$DOMAIN OK" >> "$POSTFIX_FILE"
-  echo "✅ Добавлено в Postfix whitelist"
+# --- Rotate old backups (older than 30 days) ---
+find /etc/postfix -name "client_whitelist.bak_*" -mtime +30 -delete
+
+# --- Add to Postfix whitelist ---
+if ! grep -qE "^${TARGET//./\\.}($|[[:space:]])" "$POSTFIX_FILE"; then
+  echo "$TARGET OK" >> "$POSTFIX_FILE"
+  echo "✅ Added to Postfix whitelist"
 else
-  echo "ℹ️ Уже есть в Postfix"
+  echo "ℹ️ $TARGET already in Postfix whitelist"
 fi
 
-# Добавление в Postgrey
-if ! grep -q "^$DOMAIN" "$POSTGREY_FILE"; then
-  echo "$DOMAIN" >> "$POSTGREY_FILE"
-  echo "✅ Добавлено в Postgrey whitelist"
+# --- Add to Postgrey whitelist ---
+if ! grep -qE "^${TARGET//./\\.}($|[[:space:]])" "$POSTGREY_FILE"; then
+  echo "$TARGET" >> "$POSTGREY_FILE"
+  echo "✅ Added to Postgrey whitelist"
 else
-  echo "ℹ️ Уже есть в Postgrey"
+  echo "ℹ️ $TARGET already in Postgrey whitelist"
 fi
 
-# Обновление и рестарт
+# --- Apply changes ---
 postmap "$POSTFIX_FILE"
 systemctl restart postfix
 systemctl restart postgrey
+
+echo "🎉 Done!"
