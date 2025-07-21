@@ -109,13 +109,20 @@ sudo ./add_whitelists.sh whitelist.txt
 
 ## 🛡️ Backup & Safety
 
-To restore from backup:
+Before making changes, the script creates timestamped backups. To restore from backup:
 
 ```bash
 sudo cp /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HH:MM:SS /etc/postfix/client_whitelist
 sudo cp /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HH:MM:SS /etc/postgrey/whitelist_clients.local
 sudo postmap /etc/postfix/client_whitelist
 sudo systemctl restart postfix postgrey
+```
+
+**Backup rotation:**
+To automatically delete backups older than 30 days, add this line at the end of your script or run it separately:
+
+```bash
+find /etc/postfix -name "client_whitelist.bak_*" -mtime +30 -delete
 ```
 
 ---
