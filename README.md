@@ -87,7 +87,10 @@ Run the script with your whitelist file:
 ```bash
 sudo ./add_whitelists.sh whitelist.txt
 ```
-
+Quick add: add any single domain or IP with one command, no file needed:
+```bash
+sudo ./add_whitelists.sh YOURDOMAIN.com
+```
 **What happens under the hood:**
 
 1. Backups:
