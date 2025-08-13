@@ -23,19 +23,39 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
 
 ---
 
-## 📝 Overview
-
 ## Overview
+`add_whitelists.sh` is a universal script to add domains and IP addresses to Postfix and Postgrey whitelists. It supports **single-entry** and **bulk-from-file** modes. The script **auto-creates** missing files/directories, makes **timestamped backups** before changes, **ignores** blank lines and `#` comments, **deduplicates** entries, and **restarts** Postfix/Postgrey only when changes are made. At the end it prints how many entries were added and a list of what was actually added.
 
-`add_whitelists.sh` reads a simple text file (`whitelist.txt`) with one domain or IP (CIDR supported) per line, then:
+### Usage
 
-1. **Automatically creates missing whitelist files** if they do not exist:
-   - `/etc/postfix/client_whitelist`
-   - `/etc/postgrey/whitelist_clients.local`
-2. Creates timestamped backups of your existing whitelist files.
-3. Adds entries to Postfix (`/etc/postfix/client_whitelist`) suffixed with `OK`.
-4. Adds domain entries to Postgrey (`/etc/postgrey/whitelist_clients.local`).
-5. Rebuilds the Postfix hash database and restarts both services.
+**Single entry**
+    
+    sudo ./add_whitelists.sh example.com
+    # or
+    sudo ./add_whitelists.sh 203.0.113.7
+
+**Bulk from a file**
+
+1) Create a file `whitelists.txt` with one domain or IP per line (blank lines and `#` comments are ignored):
+    
+    example.com
+    mail.example.org
+    192.168.1.10
+    # comment
+
+2) Run:
+    
+    sudo ./add_whitelists.sh -f whitelists.txt
+
+### What the script does
+- **Auto-creates** required files if missing:
+  - `/etc/postfix/client_whitelist`
+  - `/etc/postgrey/whitelist_clients.local`
+- **Backs up** whitelist files with timestamps before modifying them.
+- **Skips duplicates** (doesn’t add the same entry twice).
+- **Rebuilds** Postfix hash map (`postmap`) and **restarts** Postfix/Postgrey only when changes occurred.
+- **Shows a summary**: totals added to Postfix/Postgrey and a list of actually added entries.
+
 
 Keeping your whitelist entries in a separate file lets you safely publish this script on GitHub without exposing private data.
 
