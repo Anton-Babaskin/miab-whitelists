@@ -41,7 +41,7 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
     example.com
     mail.example.org
     192.168.1.10
-    # comment
+    
 
 2) Run:
     
