@@ -70,4 +70,103 @@ backup_if_exists() {
 }
 
 is_domain() {
-  local s
+  local s="$1"
+  [[ "$s" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$ ]]
+}
+
+is_ipv4() {
+  local s="$1"
+  [[ "$s" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
+}
+
+is_cidr() {
+  local s="$1"
+  [[ "$s" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]
+}
+
+already_in_file() {
+  local needle="$1"
+  local file="$2"
+  grep -qE -- "^${needle//./\\.}([[:space:]]|$)" "$file"
+}
+
+add_postfix() {
+  local v="$1"
+  if already_in_file "$v" "$POSTFIX_FILE"; then
+    msg "ℹ️  Already in Postfix: $v"
+    return 1
+  fi
+  msg "➕ Adding to Postfix: $v OK"
+  [[ $DRY -eq 0 ]] && echo "$v OK" >> "$POSTFIX_FILE"
+  return 0
+}
+
+add_postgrey() {
+  local v="$1"
+  if already_in_file "$v" "$POSTGREY_FILE"; then
+    msg "ℹ️  Already in Postgrey: $v"
+    return 1
+  fi
+  msg "➕ Adding to Postgrey: $v"
+  [[ $DRY -eq 0 ]] && echo "$v" >> "$POSTGREY_FILE"
+  return 0
+}
+
+process_entry() {
+  local raw="$1"
+  local entry
+  entry="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | xargs)"
+  [[ -z "$entry" ]] && return 0
+  [[ "$entry" =~ ^# ]] && return 0
+
+  if is_cidr "$entry"; then
+    msg "⚠️  CIDR '$entry' not supported in hash map."
+    return 0
+  elif is_ipv4 "$entry"; then
+    add_postfix "$entry" && CHANGED_POSTFIX=1 || true
+  elif is_domain "$entry"; then
+    add_postfix "$entry" && CHANGED_POSTFIX=1 || true
+    add_postgrey "$entry" && CHANGED_POSTGREY=1 || true
+  else
+    msg "❌ Invalid entry: $entry"
+    ERRORS=$((ERRORS + 1))
+    return 1
+  fi
+}
+
+require_root
+msg "🔧 Dry-run: $DRY"
+
+ensure_file "$POSTFIX_FILE"
+ensure_file "$POSTGREY_FILE"
+backup_if_exists "$POSTFIX_FILE"
+backup_if_exists "$POSTGREY_FILE"
+
+CHANGED_POSTFIX=0
+CHANGED_POSTGREY=0
+ERRORS=0
+
+if [[ -n "$LIST_FILE" ]]; then
+  [[ -f "$LIST_FILE" ]] || die "File not found: $LIST_FILE"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    process_entry "$line" || true
+  done < "$LIST_FILE"
+else
+  process_entry "$SINGLE_TARGET" || true
+fi
+
+if [[ $DRY -eq 0 ]]; then
+  if [[ $CHANGED_POSTFIX -eq 1 ]]; then
+    msg "🧰 postmap $POSTFIX_FILE"
+    postmap "$POSTFIX_FILE"
+    msg "🔄 Restarting Postfix"
+    systemctl restart postfix
+  fi
+  if [[ $CHANGED_POSTGREY -eq 1 ]]; then
+    msg "🔄 Restarting Postgrey"
+    systemctl restart postgrey || true
+  fi
+  msg "✅ Done. Changes: Postfix=${CHANGED_POSTFIX}, Postgrey=${CHANGED_POSTGREY}, Errors=${ERRORS}"
+else
+  msg "🔎 Dry-run complete. Would change: Postfix=${CHANGED_POSTFIX}, Postgrey=${CHANGED_POSTGREY}, Errors=${ERRORS}"
+fi
