@@ -23,15 +23,18 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
 
 ---
 
+
 ## Overview
 `add_whitelists.sh` is a universal script to add domains and IP addresses to Postfix and Postgrey whitelists. It supports **single-entry** and **bulk-from-file** modes. The script **auto-creates** missing files/directories, makes **timestamped backups** before changes, **ignores** blank lines and `#` comments, **deduplicates** entries, and **restarts** Postfix/Postgrey only when changes are made. At the end it prints how many entries were added and a list of what was actually added.
 
 ### Usage
 
 **Single entry**
+
     sudo ./add_whitelists.sh example.com
     # or
     sudo ./add_whitelists.sh 203.0.113.7
+
 
 **Bulk from a file**
 
@@ -40,6 +43,8 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
     example.com
     mail.example.org
     192.168.1.10
+   
+    
 
 2) Run:
 
