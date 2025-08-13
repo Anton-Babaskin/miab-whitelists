@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# add_whitelists.sh - Add domains/IPs to Postfix and Postgrey whitelists
-# Author: Anton Babaskin
-
 set -Eeuo pipefail
 
 POSTFIX_FILE="/etc/postfix/client_whitelist"
@@ -18,12 +15,6 @@ Options:
   -f FILE   File with entries (one per line, empty lines and #comments ignored)
   -n        Dry-run mode (no changes applied)
   -h        Show this help message
-
-Examples:
-  $0 example.com
-  $0 203.0.113.7
-  $0 -f whitelist.txt
-  $0 -n -f whitelist.txt
 EOF
   exit 1
 }
@@ -94,7 +85,8 @@ is_cidr() {
 }
 
 already_in_file() {
-  local needle="$1" file="$2"
+  local needle="$1"
+  local file="$2"
   grep -qE -- "^${needle//./\\.}([[:space:]]|$)" "$file"
 }
 
@@ -140,7 +132,7 @@ process_entry() {
   [[ "$entry" =~ ^# ]] && return 0
 
   if is_cidr "$entry"; then
-    msg "⚠️  CIDR '$entry' not supported in hash map. Use a CIDR map instead."
+    msg "⚠️  CIDR '$entry' not supported in hash map."
     return 0
   elif is_ipv4 "$entry"; then
     add_postfix "$entry" && CHANGED_POSTFIX=1 || true
