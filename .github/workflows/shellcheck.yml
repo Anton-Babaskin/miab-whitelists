@@ -18,12 +18,11 @@ jobs:
           sudo apt-get install -y shellcheck
 
       - name: Run ShellCheck
-  run: |
-    shopt -s globstar nullglob
-    files=(**/*.sh)
-    if (( ${#files[@]} == 0 )); then
-      echo "No shell scripts found."
-      exit 0
-    fi
-    shellcheck -x "${files[@]}"
-
+        run: |
+          shopt -s globstar nullglob
+          files=(**/*.sh)
+          if (( ${#files[@]} == 0 )); then
+            echo "No shell scripts found."
+            exit 0
+          fi
+          shellcheck -x "${files[@]}"
