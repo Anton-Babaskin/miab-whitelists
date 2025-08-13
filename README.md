@@ -25,12 +25,17 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
 
 ## 📝 Overview
 
+## Overview
+
 `add_whitelists.sh` reads a simple text file (`whitelist.txt`) with one domain or IP (CIDR supported) per line, then:
 
-1. Creates timestamped backups of your existing whitelist files.
-2. Adds entries to Postfix (`/etc/postfix/client_whitelist`) suffixed with `OK`.
-3. Adds domain entries to Postgrey (`/etc/postgrey/whitelist_clients.local`).
-4. Rebuilds the Postfix hash database and restarts both services.
+1. **Automatically creates missing whitelist files** if they do not exist:
+   - `/etc/postfix/client_whitelist`
+   - `/etc/postgrey/whitelist_clients.local`
+2. Creates timestamped backups of your existing whitelist files.
+3. Adds entries to Postfix (`/etc/postfix/client_whitelist`) suffixed with `OK`.
+4. Adds domain entries to Postgrey (`/etc/postgrey/whitelist_clients.local`).
+5. Rebuilds the Postfix hash database and restarts both services.
 
 Keeping your whitelist entries in a separate file lets you safely publish this script on GitHub without exposing private data.
 
