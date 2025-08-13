@@ -114,7 +114,7 @@ POSTGREY_FILE="/etc/postgrey/whitelist_clients.local"
 Run the script with your whitelist file:
 
 ```bash
-sudo ./add_whitelists.sh whitelist.txt
+sudo ./add_whitelists.sh -f whitelist.txt
 ```
 Quick add: add any single domain or IP with one command, no file needed:
 ```bash
