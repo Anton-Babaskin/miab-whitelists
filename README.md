@@ -1,118 +1,168 @@
-MIAB Whitelists
+# MIAB Whitelists
+
+![ShellCheck](https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml/badge.svg)
+
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Automate adding domains and IP addresses to Postfix and Postgrey whitelists on Mail-in-a-Box servers with a single, universal Bash script.
-📝 Overview
-The add_whitelists.sh script simplifies whitelisting domains and IP addresses for Postfix and Postgrey on Mail-in-a-Box servers. It supports:
 
-Reading a text file (whitelist.txt) with one domain or IP per line.
-Adding a single domain or IP directly via command-line argument.
-Dry-run mode to preview changes without modifying files.
-Creating timestamped backups of existing whitelist files.
-Adding entries to Postfix (/etc/postfix/client_whitelist) with OK suffix.
-Adding domain entries to Postgrey (/etc/postgrey/whitelist_clients.local).
-Rebuilding the Postfix hash database and restarting services as needed.
+---
 
-The whitelist entries are stored in a separate file or provided as arguments, ensuring sensitive data is not hardcoded in the script.
-⚙️ Prerequisites
+## 📖 Table of Contents
 
-OS: Debian / Ubuntu
-Services: Postfix and Postgrey installed
-Permissions: Root or sudo access to modify /etc/postfix and /etc/postgrey
-Input Format: Domains (e.g., example.com, mail.partner-domain.org) or IPv4 addresses (e.g., 198.51.100.1). CIDR notation (e.g., 198.51.100.0/24) is not supported in Postfix hash maps and will be skipped with a warning.
+* [Overview](#overview)
+* [Prerequisites](#prerequisites)
+* [Installation](#installation)
+* [Configuration](#configuration)
+* [Usage](#usage)
+* [Backup & Safety](#backup--safety)
+* [Examples](#examples)
+* [Contributing](#contributing)
+* [License](#license)
 
-🚀 Installation
+---
 
-Clone the repository:
-git clone https://github.com/Anton-Babaskin/miab-whitelists.git
-cd miab-whitelists
+## 📝 Overview
 
+`add_whitelists.sh` reads a simple text file (`whitelist.txt`) with one domain or IP (CIDR supported) per line, then:
 
-Create a whitelist.txt file (optional, for bulk entries):
-# whitelist.txt
-example.com
-198.51.100.1
-mail.partner-domain.org
+1. Creates timestamped backups of your existing whitelist files.
+2. Adds entries to Postfix (`/etc/postfix/client_whitelist`) suffixed with `OK`.
+3. Adds domain entries to Postgrey (`/etc/postgrey/whitelist_clients.local`).
+4. Rebuilds the Postfix hash database and restarts both services.
 
+Keeping your whitelist entries in a separate file lets you safely publish this script on GitHub without exposing private data.
 
-Make the script executable:
-chmod +x add_whitelists.sh
+---
 
+## ⚙️ Prerequisites
 
+* **OS:** Debian / Ubuntu
+* **Services:** Postfix & Postgrey installed
+* **Permissions:** Root or `sudo` to modify `/etc/postfix` and `/etc/postgrey`
 
-🛠️ Configuration
-Customize file paths in the script header if needed:
+---
+
+## 🚀 Installation
+
+1. **Clone the repo**
+
+   ```bash
+   git clone https://github.com/Anton-Babaskin/miab-whitelists.git
+   cd miab-whitelists
+   ```
+2. **Create your whitelist file**
+
+   ```text
+   # whitelist.txt
+   example.com
+   198.51.100.0/24
+   mail.partner-domain.org
+   ```
+3. **Make the script executable**
+
+   ```bash
+   chmod +x add_whitelists.sh
+   ```
+
+---
+
+## 🛠️ Configuration
+
+Customize paths in the script header if needed:
+
+```bash
 # add_whitelists.sh
 POSTFIX_FILE="/etc/postfix/client_whitelist"
 POSTGREY_FILE="/etc/postgrey/whitelist_clients.local"
+```
 
-Ensure /etc/postfix/main.cf includes the Postfix whitelist in smtpd_client_restrictions, e.g.:
-smtpd_client_restrictions = ..., check_client_access hash:/etc/postfix/client_whitelist, ...
+---
 
-▶️ Usage
-Add entries from a file
-Run the script with a whitelist file:
-sudo ./add_whitelists.sh -f whitelist.txt
+## ▶️ Usage
 
-Add a single entry
-Add a single domain or IP directly:
-sudo ./add_whitelists.sh example.com
-sudo ./add_whitelists.sh 198.51.100.1
+Run the script with your whitelist file:
 
-Dry-run mode
-Preview changes without applying them:
-sudo ./add_whitelists.sh -n -f whitelist.txt
-sudo ./add_whitelists.sh -n example.com
+```bash
+sudo ./add_whitelists.sh whitelist.txt
+```
+Quick add: add any single domain or IP with one command, no file needed:
+```bash
+sudo ./add_whitelists.sh YOURDOMAIN.com
+```
+**What happens under the hood:**
 
-What happens
+1. Backups:
 
-Backups: Creates timestamped backups of whitelist files (e.g., client_whitelist.bak_YYYY-MM-DD_HHMMSS).
-Processing:
-Skips empty lines, comments (#), or invalid entries.
-Warns about unsupported CIDR entries and skips them.
-Adds valid IPs or domains to Postfix (ENTRY OK).
-Adds valid domains (not IPs) to Postgrey (ENTRY).
+   ```bash
+   /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HH:MM:SS
+   /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HH:MM:SS
+   ```
+2. Reads each line:
 
+   * If missing in Postfix: appends `ENTRY OK`.
+   * If a domain (not IP/CIDR) and missing in Postgrey: appends `ENTRY`.
+3. Applies changes:
 
-Application:
-Runs postmap on the Postfix whitelist if modified.
-Restarts postfix and postgrey services if changes are made.
+   ```bash
+   postmap "$POSTFIX_FILE"
+   systemctl restart postfix
+   systemctl restart postgrey
+   ```
 
+---
 
+## 🛡️ Backup & Safety
 
-🛡️ Backup & Safety
-The script creates timestamped backups before modifying files. To restore:
-sudo cp /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HHMMSS /etc/postfix/client_whitelist
-sudo cp /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HHMMSS /etc/postgrey/whitelist_clients.local
+Before making changes, the script creates timestamped backups. To restore from backup:
+
+```bash
+sudo cp /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HH:MM:SS /etc/postfix/client_whitelist
+sudo cp /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HH:MM:SS /etc/postgrey/whitelist_clients.local
 sudo postmap /etc/postfix/client_whitelist
 sudo systemctl restart postfix postgrey
+```
 
-To automatically delete backups older than 30 days, add to the script or run separately:
+**Backup rotation:**
+To automatically delete backups older than 30 days, add this line at the end of your script or run it separately:
+
+```bash
 find /etc/postfix -name "client_whitelist.bak_*" -mtime +30 -delete
-find /etc/postgrey -name "whitelist_clients.local.bak_*" -mtime +30 -delete
+```
 
-💡 Examples
-Bulk add via file
-echo -e "partner.com\n198.51.100.1" > whitelist.txt
-sudo ./add_whitelists.sh -f whitelist.txt
+---
 
-Single entry
-sudo ./add_whitelists.sh mail.example.org
+## 💡 Examples
 
-Automate via cron
+**One-liner:**
+
+```bash
+echo -e "partner.com
+198.51.100.0/24" > whitelist.txt
+sudo ./add_whitelists.sh whitelist.txt
+```
+
+**Automate via cron:**
+
+```cron
 # /etc/cron.daily/miab-whitelist
 #!/bin/bash
 cd /opt/miab-whitelists
 git pull --ff-only
-/opt/miab-whitelists/add_whitelists.sh -f /opt/miab-whitelists/whitelist.txt
+/opt/miab-whitelists/add_whitelists.sh /opt/miab-whitelists/whitelist.txt
+```
 
-⚠️ Notes
+---
 
-CIDR Limitation: CIDR notation (e.g., 198.51.100.0/24) is not supported in Postfix hash maps. Use a separate CIDR table in /etc/postfix/main.cf (e.g., check_client_access cidr:/etc/postfix/client_whitelist.cidr).
-Validation: The script validates domains and IPv4 addresses, skipping invalid entries with warnings.
-Case Handling: Entries are converted to lowercase to ensure consistency.
-Main.cf Check: The script checks if client_whitelist is referenced in /etc/postfix/main.cf and warns if missing.
+## 🤝 Contributing
 
-🤝 Contributing
-Contributions are welcome! Please follow the standard fork → branch → pull request workflow. Report issues or suggest improvements via GitHub Issues.
-📜 License
-MIT © Anton Babaskin. See LICENSE for details.
+Pull requests and issues welcome!
+Please follow the standard fork → branch → PR workflow.
+
+---
+
+## 📜 License
+
+MIT © Anton Babaskin. See [LICENSE](LICENSE) for details.
+![ShellCheck](https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml/badge.svg)
