@@ -29,7 +29,6 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
 ### Usage
 
 **Single entry**
-    
     sudo ./add_whitelists.sh example.com
     # or
     sudo ./add_whitelists.sh 203.0.113.7
@@ -37,14 +36,13 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
 **Bulk from a file**
 
 1) Create a file `whitelists.txt` with one domain or IP per line (blank lines and `#` comments are ignored):
-    
+
     example.com
     mail.example.org
     192.168.1.10
-    
 
 2) Run:
-    
+
     sudo ./add_whitelists.sh -f whitelists.txt
 
 ### What the script does
