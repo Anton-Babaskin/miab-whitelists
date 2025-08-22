@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# add_whitelists.sh — add one or many domains/IPs to Postfix + Postgrey
+# add_whitelists.sh — add one or many domains/IPs to Postfix + Postgrey with logging
 # Usage:
 #   ./add_whitelists.sh example.com
 #   ./add_whitelists.sh -f whitelists.txt
@@ -10,6 +10,32 @@ set -Eeuo pipefail
 POSTFIX_FILE="/etc/postfix/client_whitelist"
 POSTGREY_FILE="/etc/postgrey/whitelist_clients.local"
 BACKUP_DATE="$(date +%F_%H%M%S)"
+
+# --- logging ---
+LOG_FILE="/var/log/add_whitelists.log"
+# If we can prepare the log file, we log; otherwise continue silently (no crash).
+LOG_ENABLED=0
+prepare_log() {
+  local dir
+  dir="$(dirname "$LOG_FILE")"
+  if mkdir -p "$dir" 2>/dev/null; then
+    # 0640 root:adm (or root:root if adm missing)
+    touch "$LOG_FILE" 2>/dev/null || return 0
+    chown root:adm "$LOG_FILE" 2>/dev/null || true
+    chmod 0640 "$LOG_FILE" 2>/dev/null || true
+    LOG_ENABLED=1
+  fi
+}
+log_line() {
+  # Log to file (if enabled) and echo to stdout
+  local ts user msg
+  ts="$(date '+%F %T')"
+  user="${SUDO_USER:-$USER:-root}"
+  msg="$*"
+  if [ "$LOG_ENABLED" -eq 1 ]; then
+    printf '%s [%s] %s\n' "$ts" "$user" "$msg" >> "$LOG_FILE" || true
+  fi
+}
 
 usage() {
   cat <<'EOF'
@@ -112,6 +138,7 @@ add_postgrey() {
 ADDED_ALL=()
 ADDED_PF=0
 ADDED_PG=0
+SKIPPED_PG=0
 ERRORS=0
 
 process_entry() {
@@ -123,26 +150,34 @@ process_entry() {
 
   if is_cidr "$entry"; then
     msg "⚠️  ${C_YELL}CIDR not supported in hash map:${C_RESET} $entry"
+    log_line "SKIP CIDR $entry"
     return 0
   elif is_ipv4 "$entry"; then
     if add_postfix "$entry"; then
       ADDED_PF=$((ADDED_PF+1)); ADDED_ALL+=( "$entry" )
+      SKIPPED_PG=$((SKIPPED_PG+1))
+      log_line "ADD Postfix IP $entry"
+    else
+      log_line "SKIP duplicate (Postfix) IP $entry"
     fi
   elif is_domain "$entry"; then
     local touched=0
-    if add_postfix "$entry"; then ADDED_PF=$((ADDED_PF+1)); touched=1; fi
-    if add_postgrey "$entry"; then ADDED_PG=$((ADDED_PG+1)); touched=1; fi
+    if add_postfix "$entry"; then ADDED_PF=$((ADDED_PF+1)); touched=1; log_line "ADD Postfix domain $entry"; else log_line "SKIP duplicate (Postfix) domain $entry"; fi
+    if add_postgrey "$entry"; then ADDED_PG=$((ADDED_PG+1)); touched=1; log_line "ADD Postgrey domain $entry"; else log_line "SKIP duplicate (Postgrey) domain $entry"; fi
     [ "$touched" -eq 1 ] && ADDED_ALL+=( "$entry" )
   else
     msg "❌ ${C_RED}Invalid entry:${C_RESET} $entry"
     ERRORS=$((ERRORS+1))
+    log_line "ERROR invalid entry $entry"
     return 1
   fi
 }
 
 # ------------ main ------------
 require_root
+prepare_log
 msg "🔧 Dry-run: $DRY"
+[ "$LOG_ENABLED" -eq 1 ] && log_line "START dry=$DRY args: $*"
 
 ensure_file "$POSTFIX_FILE"
 ensure_file "$POSTGREY_FILE"
@@ -163,11 +198,17 @@ if [ "$DRY" -eq 0 ]; then
     msg "🧰 postmap $POSTFIX_FILE"
     postmap "$POSTFIX_FILE"
     msg "🔄 Restarting Postfix";  systemctl restart postfix
+    log_line "RESTART postfix (added=$ADDED_PF)"
   fi
   if [ "$ADDED_PG" -gt 0 ]; then
     msg "🔄 Restarting Postgrey"; systemctl restart postgrey || true
+    log_line "RESTART postgrey (added=$ADDED_PG)"
   fi
-  msg "✅ ${C_GREEN}Done.${C_RESET} Changes: Postfix=${C_CYAN}${ADDED_PF}${C_RESET}, Postgrey=${C_CYAN}${ADDED_PG}${C_RESET}, Errors=${C_CYAN}${ERRORS}${C_RESET}"
+  if [ "$SKIPPED_PG" -gt 0 ]; then
+    msg "✅ ${C_GREEN}Done.${C_RESET} Changes: Postfix=${C_CYAN}${ADDED_PF}${C_RESET}, Postgrey=${C_CYAN}${ADDED_PG}${C_RESET} (skipped ${SKIPPED_PG} IPs), Errors=${C_CYAN}${ERRORS}${C_RESET}"
+  else
+    msg "✅ ${C_GREEN}Done.${C_RESET} Changes: Postfix=${C_CYAN}${ADDED_PF}${C_RESET}, Postgrey=${C_CYAN}${ADDED_PG}${C_RESET}, Errors=${C_CYAN}${ERRORS}${C_RESET}"
+  fi
 else
   msg "🔎 Dry-run complete. Would change: Postfix=${ADDED_PF}, Postgrey=${ADDED_PG}, Errors=${ERRORS}"
 fi
@@ -186,3 +227,5 @@ if [ "${#ADDED_ALL[@]}" -gt 0 ]; then
 else
   msg "ℹ️ No new entries were added."
 fi
+
+[ "$LOG_ENABLED" -eq 1 ] && log_line "END pf=$ADDED_PF pg=$ADDED_PG skipped_pg_ips=$SKIPPED_PG errors=$ERRORS"
