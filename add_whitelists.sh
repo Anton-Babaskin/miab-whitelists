@@ -30,7 +30,7 @@ log_line() {
   # Log to file (if enabled) and echo to stdout
   local ts user msg
   ts="$(date '+%F %T')"
-  user="${SUDO_USER:-$USER:-root}"
+  user="${SUDO_USER:-${USER:-root}}"
   msg="$*"
   if [ "$LOG_ENABLED" -eq 1 ]; then
     printf '%s [%s] %s\n' "$ts" "$user" "$msg" >> "$LOG_FILE" || true
