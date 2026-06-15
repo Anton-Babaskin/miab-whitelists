@@ -25,7 +25,20 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
 
 
 ## Overview
-`add_whitelists.sh` is a universal script to add domains and IP addresses to Postfix and Postgrey whitelists. It supports **single-entry** and **bulk-from-file** modes. The script **auto-creates** missing files/directories, makes **timestamped backups** before changes, **ignores** blank lines and `#` comments, **deduplicates** entries, and **restarts** Postfix/Postgrey only when changes are made. At the end it prints how many entries were added and a list of what was actually added.
+`add_whitelists.sh` is a universal script to add domains, IP addresses and CIDR ranges to Postfix and Postgrey whitelists. It supports **single-entry** and **bulk-from-file** modes. The script **auto-creates** missing files/directories, makes **timestamped backups** before changes (rotating backups older than 30 days), **ignores** blank lines and `#` comments, **deduplicates** entries, and **restarts** Postfix/Postgrey only when changes are made. At the end it prints how many entries were added to each file and a list of what was actually added.
+
+### What goes where
+
+The two whitelist files serve different purposes, so each entry type is routed accordingly:
+
+| Entry type | Postfix (`client_whitelist`) | Postgrey (`whitelist_clients.local`) | Notes |
+|------------|:---------------------------:|:------------------------------------:|-------|
+| Domain     | ✅ `entry OK`               | ✅ `entry`                            | Added to both |
+| IPv4       | ✅ `entry OK`               | ✅ `entry`                            | Added to both |
+| CIDR       | ❌ (skipped)                | ✅ `entry`                            | Postfix hash maps don't support CIDR |
+
+- **Postfix** (`/etc/postfix/client_whitelist`) — hash table (`entry OK`), requires `postmap` after changes. Bypasses Postfix smtpd restrictions (RBL, rate limits, reject rules). Supports domains and IPs, **not** CIDR.
+- **Postgrey** (`/etc/postgrey/whitelist_clients.local`) — plain text (`entry`), no `postmap` needed. Bypasses greylisting delay. Supports domains, IPs and CIDR.
 
 ### Usage
 
@@ -55,10 +68,12 @@ Automate adding domains and IP addresses to Postfix and Postgrey whitelists on M
 - **Auto-creates** required files if missing:
   - `/etc/postfix/client_whitelist`
   - `/etc/postgrey/whitelist_clients.local`
-- **Backs up** whitelist files with timestamps before modifying them.
+- **Routes by entry type** (see table above): domains and IPs go to both files; CIDR goes to Postgrey only.
+- **Backs up** whitelist files with timestamps before modifying them, and **rotates** backups older than 30 days.
 - **Skips duplicates** (doesn’t add the same entry twice).
 - **Rebuilds** Postfix hash map (`postmap`) and **restarts** Postfix/Postgrey only when changes occurred.
-- **Shows a summary**: totals added to Postfix/Postgrey and a list of actually added entries.
+- **Shows a summary**: separate counters (Postfix added, Postgrey added, errors) and a list of actually added entries.
+- **`--version`** prints the script version.
 
 
 Keeping your whitelist entries in a separate file lets you safely publish this script on GitHub without exposing private data.
@@ -128,10 +143,11 @@ sudo ./add_whitelists.sh YOURDOMAIN.com
    /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HH:MM:SS
    /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HH:MM:SS
    ```
-2. Reads each line:
+2. Reads each line and routes by type:
 
-   * If missing in Postfix: appends `ENTRY OK`.
-   * If a domain (not IP/CIDR) and missing in Postgrey: appends `ENTRY`.
+   * Domain or IP, if missing in Postfix: appends `ENTRY OK`.
+   * Domain, IP **or CIDR**, if missing in Postgrey: appends `ENTRY`.
+   * CIDR is **never** added to Postfix (hash maps don't support CIDR).
 3. Applies changes:
 
    ```bash
@@ -180,6 +196,32 @@ sudo ./add_whitelists.sh whitelist.txt
 cd /opt/miab-whitelists
 git pull --ff-only
 /opt/miab-whitelists/add_whitelists.sh /opt/miab-whitelists/whitelist.txt
+```
+
+---
+
+## ✅ Testing checklist
+
+After changing the script, verify routing manually on a MIAB server:
+
+```bash
+sudo ./add_whitelists.sh testdomain.com
+grep testdomain.com /etc/postfix/client_whitelist            # → "testdomain.com OK"
+grep testdomain.com /etc/postgrey/whitelist_clients.local    # → "testdomain.com"
+
+sudo ./add_whitelists.sh 1.2.3.4
+grep 1.2.3.4 /etc/postfix/client_whitelist                   # → "1.2.3.4 OK"
+grep 1.2.3.4 /etc/postgrey/whitelist_clients.local           # → "1.2.3.4"
+
+sudo ./add_whitelists.sh 198.51.100.0/24
+grep 198.51.100.0/24 /etc/postfix/client_whitelist           # → NOT present
+grep 198.51.100.0/24 /etc/postgrey/whitelist_clients.local   # → present
+```
+
+Also run ShellCheck before committing:
+
+```bash
+shellcheck add_whitelists.sh
 ```
 
 ---
