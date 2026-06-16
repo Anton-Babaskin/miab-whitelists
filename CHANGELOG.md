@@ -5,7 +5,21 @@ All significant changes in one place.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
-- …
+### Added
+- **`refresh_cloud_senders.sh`** — companion tool that recursively expands the SPF
+  records of major mail providers (Microsoft 365, Google Workspace, Amazon SES,
+  SendGrid, Mailgun, Mimecast) into a deduplicated list of ip4/ip6 CIDR ranges.
+  - Recursively follows `include:` and `redirect=` with a depth limit and loop guard.
+  - `-d EXISTING` diff mode: prints only ranges not already present in a whitelist.
+  - `-o OUTPUT` custom output path, `--version` flag.
+  - Generates output ready to feed into `add_whitelists.sh -f`.
+- Project documentation overhaul: bilingual READMEs (`README.md` / `README_RU.md`),
+  `LICENSE` (MIT), `SECURITY.md`, `.editorconfig`, issue and pull request templates,
+  and a corrected Contributor Covenant `CODE_OF_CONDUCT.md`.
+- Sample whitelist moved to `examples/whitelist.example.txt` with safe placeholder data.
+### Changed
+- ShellCheck workflow now fails on real problems (removed `|| true`), runs `bash -n`,
+  declares `permissions: contents: read`, and supports `workflow_dispatch`.
 
 ## [2.0.0] – 2026-06-15
 ### Fixed
