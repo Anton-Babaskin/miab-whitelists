@@ -1,0 +1,15 @@
+# Example whitelist for add_whitelists.sh
+#
+# One entry per line. Empty lines and lines starting with '#' are ignored.
+# These are documentation-only placeholder values (RFC 5737 / RFC 2606).
+# Replace them with senders you control or have independently verified.
+
+# Domains
+example.com
+mail.example.net
+
+# IPv4
+203.0.113.10
+
+# IPv4 CIDR
+198.51.100.0/24

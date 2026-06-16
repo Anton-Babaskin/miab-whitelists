@@ -7,16 +7,21 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  shellcheck:
+  lint:
+    name: Lint add_whitelists.sh
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install ShellCheck
-        run: sudo apt-get install -y shellcheck
+      - name: Bash syntax check
+        run: bash -n add_whitelists.sh
 
-      - name: Run ShellCheck
-        run: shellcheck add_whitelists.sh || true
+      - name: ShellCheck
+        run: shellcheck add_whitelists.sh
