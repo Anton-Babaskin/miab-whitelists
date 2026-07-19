@@ -6,6 +6,36 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.1.0] – 2026-07-19
+### Added
+- **`--setup` — one-command Postfix integration.** Idempotently wires
+  `check_client_access hash:/etc/postfix/client_whitelist` and
+  `check_client_access cidr:/etc/postfix/client_whitelist_cidr` into
+  `smtpd_recipient_restrictions`, inserted right before the first
+  `check_policy_service` (Postgrey). A whitelisted client therefore skips
+  greylisting but still passes RBL checks and `reject_unlisted_recipient`.
+  The existing restrictions chain is preserved — nothing is hardcoded.
+  Map files (and the hash `.db`) are created before `postfix reload`, so the
+  reload cannot fail on a missing map. Safe to re-run after MIAB updates.
+- **`--check`** — shows whether both maps are wired in and prints the current
+  restrictions chain; exit code 0 = wired, 2 = not wired (scriptable).
+- **CIDR support in Postfix via a `cidr:` map.** IPv4 and IPv6 CIDR ranges now
+  go to `/etc/postfix/client_whitelist_cidr` (plus Postgrey, as before).
+  IPv6 CIDR entries are no longer rejected as invalid.
+- Safety net: if entries were added while the maps are not wired into Postfix,
+  the script warns and suggests `--setup` instead of silently feeding a dead file.
+- The cidr map file gets the same backups and 30-day rotation as the other files.
+### Changed
+- `postfix reload` instead of `systemctl restart postfix` — active SMTP
+  sessions are no longer dropped when applying whitelist changes.
+- Whitespace trimming switched from `xargs` to `sed` (input containing quotes
+  no longer breaks parsing); CR characters from CRLF files are stripped.
+### Fixed
+- **Dry-run crash under `set -e`.** In v2.0, `backup_if_exists`/`ensure_file`
+  returned non-zero in dry-run mode, silently killing the script after the
+  first backup message. Dry-run now runs to completion.
+- The script no longer exits with status 1 when audit logging is unavailable.
+
 ## [2.0.0] – 2026-06-16
 ### Added
 - **`refresh_cloud_senders.sh`** — companion tool that recursively expands the SPF

@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-2.0-1f6feb?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.1-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="MIT License" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -53,7 +53,7 @@
 
 | Tool | What it does | Needs root |
 | ---- | ------------ | :--------: |
-| [`add_whitelists.sh`](#-add_whitelistssh) | Add domains, IPv4 addresses and IPv4 CIDR ranges to the Postfix and Postgrey whitelists — one entry at a time or in bulk from a file. Idempotent, with backups and dry-run. | Yes |
+| [`add_whitelists.sh`](#-add_whitelistssh) | Add domains, IPv4 addresses and IPv4/IPv6 CIDR ranges to the Postfix and Postgrey whitelists — one entry at a time or in bulk from a file. Idempotent, with backups, dry-run and one-command Postfix integration (`--setup`). | Yes |
 | [`refresh_cloud_senders.sh`](#%EF%B8%8F-refresh_cloud_senderssh) | Auto-generate up-to-date cloud provider IP ranges by recursively expanding their SPF records into ip4/ip6 CIDR. Pairs with `add_whitelists.sh`. | No |
 
 Typical pipeline:
@@ -81,13 +81,13 @@ sudo ./add_whitelists.sh example.com
 
 The script automatically:
 
-* detects whether the entry is a domain, IPv4 address or IPv4 CIDR network;
+* detects whether the entry is a domain, IPv4 address or IPv4/IPv6 CIDR network;
 * sends it to the appropriate whitelist file;
 * skips existing entries;
 * creates timestamped backups;
 * rotates backups older than 30 days;
 * rebuilds the Postfix map only when required;
-* restarts only the affected services;
+* reloads/restarts only the affected services (`postfix reload` — active SMTP sessions are not dropped);
 * writes an audit log when logging is available.
 
 For multiple entries:
@@ -106,7 +106,8 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 
 | Feature                     | Description                                                                 |
 | --------------------------- | --------------------------------------------------------------------------- |
-| 🎯 Automatic routing        | Domains, IPv4 addresses and CIDR networks are sent to the correct whitelist |
+| 🎯 Automatic routing        | Domains, IPv4 addresses and IPv4/IPv6 CIDR networks are sent to the correct whitelist |
+| 🔌 One-command integration  | `--setup` wires the whitelist maps into `smtpd_recipient_restrictions`; `--check` verifies the wiring |
 | 📄 Single or bulk input     | Process one entry or load hundreds of entries from a file                   |
 | ♻️ Idempotent operation     | Existing entries are detected and skipped                                   |
 | 🔍 Dry-run mode             | Preview planned changes without modifying files or restarting services      |
@@ -121,24 +122,54 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 
 The two whitelist files serve different purposes, so entries are routed automatically.
 
-| Entry type         | Example           |       Postfix       |       Postgrey      |
-| ------------------ | ----------------- | :-----------------: | :-----------------: |
-| Domain or hostname | `example.com`     |  ✅ `example.com OK` |   ✅ `example.com`   |
-| IPv4 address       | `203.0.113.10`    | ✅ `203.0.113.10 OK` |   ✅ `203.0.113.10`  |
-| IPv4 CIDR network  | `198.51.100.0/24` |          ❌          | ✅ `198.51.100.0/24` |
+| Entry type          | Example           |            Postfix            |       Postgrey      |
+| ------------------- | ----------------- | :---------------------------: | :-----------------: |
+| Domain or hostname  | `example.com`     | ✅ hash: `example.com OK`      |   ✅ `example.com`   |
+| IPv4 address        | `203.0.113.10`    | ✅ hash: `203.0.113.10 OK`     |   ✅ `203.0.113.10`  |
+| IPv4 CIDR network   | `198.51.100.0/24` | ✅ cidr: `198.51.100.0/24 OK`  | ✅ `198.51.100.0/24` |
+| IPv6 CIDR network   | `2001:db8::/32`   | ✅ cidr: `2001:db8::/32 OK`    |  ✅ `2001:db8::/32`  |
 
 > [!NOTE]
-> Postfix `hash:` maps do not support CIDR networks. CIDR entries are therefore added only to Postgrey.
+> Postfix `hash:` maps do not support CIDR networks, so CIDR entries (IPv4 and IPv6) go into a separate `cidr:` map, which Postfix re-reads on every reload.
 
 > [!IMPORTANT]
-> `add_whitelists.sh` validates IPv4 only. Domains, IPv4 addresses and IPv4 CIDR are supported; IPv6 is not. IPv6 ranges are reported as invalid entries (see the note in the `refresh_cloud_senders.sh` section).
+> The Postfix maps only take effect after `sudo add_whitelists.sh --setup` has been run once — it wires both maps into `smtpd_recipient_restrictions` (see [Postfix integration](#-postfix-integration----setup----check)). Postgrey whitelisting works without `--setup`.
 
 #### Managed files
 
-| Service  | File                                    |
-| -------- | --------------------------------------- |
-| Postfix  | `/etc/postfix/client_whitelist`         |
-| Postgrey | `/etc/postgrey/whitelist_clients.local` |
+| Service  | File                                    | Map type |
+| -------- | --------------------------------------- | -------- |
+| Postfix  | `/etc/postfix/client_whitelist`         | `hash:`  |
+| Postfix  | `/etc/postfix/client_whitelist_cidr`    | `cidr:`  |
+| Postgrey | `/etc/postgrey/whitelist_clients.local` | —        |
+
+### 🔌 Postfix integration — `--setup` / `--check`
+
+Adding entries to the whitelist files is not enough by itself: Postfix must be told to consult them. `--setup` does this once, idempotently:
+
+```bash
+sudo add_whitelists.sh --setup
+```
+
+It inserts
+
+```text
+check_client_access hash:/etc/postfix/client_whitelist,
+check_client_access cidr:/etc/postfix/client_whitelist_cidr
+```
+
+into `smtpd_recipient_restrictions` **right before the first `check_policy_service`** (the Postgrey policy daemon). This position matters: a whitelisted client skips greylisting but still passes RBL checks and `reject_unlisted_recipient` (it cannot send to nonexistent mailboxes). The existing restrictions chain is preserved as-is — nothing is hardcoded or replaced.
+
+`--setup` is safe to re-run at any time: if both maps are already wired, it does nothing. If Postfix config is missing the map files, they are created (and `postmap` is run) *before* `postfix reload`, so the reload cannot fail on a missing map.
+
+To verify the current state:
+
+```bash
+add_whitelists.sh --check    # exit 0 = wired, exit 2 = not wired
+```
+
+> [!WARNING]
+> Mail-in-a-Box updates may regenerate `main.cf` and overwrite `smtpd_recipient_restrictions`. Re-run `--setup` (or at least `--check`) after every MIAB update. The script also prints a reminder whenever it detects that entries were added while the maps are not wired.
 
 ### 🚀 Quick start
 
@@ -174,9 +205,12 @@ sudo add_whitelists.sh example.com                       # add a domain
 sudo add_whitelists.sh mail.example.net                  # add a mail hostname
 sudo add_whitelists.sh 203.0.113.10                      # add an IPv4 address
 sudo add_whitelists.sh 198.51.100.0/24                   # add an IPv4 CIDR network
+sudo add_whitelists.sh 2001:db8::/32                     # add an IPv6 CIDR network
 sudo add_whitelists.sh -f examples/whitelist.example.txt # import a file
 sudo add_whitelists.sh -n example.com                    # preview a single entry
 sudo add_whitelists.sh -n -f examples/whitelist.example.txt  # preview a whole file
+sudo add_whitelists.sh --setup                           # wire maps into Postfix (once)
+add_whitelists.sh --check                                # verify Postfix integration
 add_whitelists.sh -h                                     # show help
 add_whitelists.sh --help                                 # show help
 add_whitelists.sh --version                              # show the script version
@@ -188,12 +222,16 @@ add_whitelists.sh --version                              # show the script versi
 Usage:
   add_whitelists.sh [-n] ENTRY
   add_whitelists.sh [-n] -f FILE
+  add_whitelists.sh --setup
+  add_whitelists.sh --check
 
 Options:
   -f FILE      Read entries from a file
   -n           Dry-run: show the result without applying changes
   -h           Show help
   --help       Show help
+  --setup      Wire whitelist maps into Postfix restrictions (idempotent)
+  --check      Show Postfix integration status (exit 0 = wired, 2 = not wired)
   --version    Show the script version
 ```
 
@@ -214,6 +252,9 @@ mail.example.net
 
 # IPv4 CIDR networks
 198.51.100.0/24
+
+# IPv6 CIDR networks
+2001:db8::/32
 ```
 
 The parser:
@@ -226,7 +267,7 @@ The parser:
 * skips entries that already exist.
 
 > [!NOTE]
-> The current version supports domains, IPv4 addresses and IPv4 CIDR networks. IPv6 is not currently supported.
+> Supported entry types: domains, IPv4 addresses, IPv4 CIDR and IPv6 CIDR networks. Bare IPv6 addresses are not yet supported — whitelist them as a `/128` CIDR (e.g. `2001:db8::1/128`).
 
 ### 🔄 What happens during a run
 
@@ -239,9 +280,9 @@ Normalize and validate
   ▼
 Detect entry type
   │
-  ├── Domain ──────► Postfix + Postgrey
-  ├── IPv4 ────────► Postfix + Postgrey
-  └── IPv4 CIDR ───► Postgrey only
+  ├── Domain ────────► Postfix hash + Postgrey
+  ├── IPv4 ──────────► Postfix hash + Postgrey
+  └── CIDR v4/v6 ────► Postfix cidr + Postgrey
   │
   ▼
 Skip existing entries
@@ -249,8 +290,9 @@ Skip existing entries
   ▼
 Apply only actual changes
   │
-  ├── Postfix changed ─► postmap + restart Postfix
-  └── Postgrey changed ─► restart Postgrey
+  ├── Postfix hash changed ─► postmap + reload Postfix
+  ├── Postfix cidr changed ─► reload Postfix
+  └── Postgrey changed ─────► restart Postgrey
 ```
 
 On each run, the script:
@@ -272,6 +314,7 @@ Backups use the following format:
 
 ```text
 /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HHMMSS
+/etc/postfix/client_whitelist_cidr.bak_YYYY-MM-DD_HHMMSS
 /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HHMMSS
 ```
 
@@ -353,8 +396,9 @@ This repository intentionally contains no production corporate whitelist.
 | `ERROR: Run as root or with sudo` | Run with `sudo`. |
 | `File not found: ...` | Check the path with `ls -lah`, then pass an absolute path to `-f`. |
 | An entry was not added | It probably already exists — `grep -F "example.com" /etc/postfix/client_whitelist`. Also check the log. |
-| CIDR is missing from Postfix | Expected — Postfix `hash:` maps do not support CIDR, so CIDR goes to Postgrey only. |
-| Postfix changes not active | `sudo postmap /etc/postfix/client_whitelist && sudo systemctl restart postfix`. |
+| Whitelisted client is still greylisted | The maps are probably not wired into Postfix — run `add_whitelists.sh --check`, then `sudo add_whitelists.sh --setup`. |
+| Integration lost after a MIAB update | MIAB regenerated `main.cf`. Re-run `sudo add_whitelists.sh --setup`. |
+| Postfix changes not active | `sudo postmap /etc/postfix/client_whitelist && sudo postfix reload`. |
 
 Validate the script before running it:
 
@@ -422,7 +466,7 @@ sudo ./add_whitelists.sh -f new.txt
 ```
 
 > [!IMPORTANT]
-> `refresh_cloud_senders.sh` emits both IPv4 and IPv6 ranges, but `add_whitelists.sh` validates IPv4 only. When you feed the generated file to `add_whitelists.sh`, IPv4 CIDR ranges are routed to Postgrey, while any IPv6 ranges are reported as invalid entries and skipped. The IPv6 section is included for reference and manual Postgrey use.
+> `refresh_cloud_senders.sh` emits both IPv4 and IPv6 ranges, and since v2.1 `add_whitelists.sh` accepts both: every CIDR range (v4 and v6) is routed to the Postfix `cidr:` map and to Postgrey. Feed the generated file straight to `add_whitelists.sh -f` — nothing is skipped.
 
 ### Default providers
 

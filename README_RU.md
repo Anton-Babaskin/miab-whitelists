@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Версия" src="https://img.shields.io/badge/version-2.0-1f6feb?style=for-the-badge">
+  <img alt="Версия" src="https://img.shields.io/badge/version-2.1-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="Лицензия MIT" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -53,7 +53,7 @@
 
 | Инструмент | Что делает | Нужен root |
 | ---------- | ---------- | :--------: |
-| [`add_whitelists.sh`](#-add_whitelistssh) | Добавляет домены, IPv4-адреса и IPv4 CIDR-подсети в whitelist Postfix и Postgrey — по одной записи или массово из файла. Идемпотентно, с бэкапами и dry-run. | Да |
+| [`add_whitelists.sh`](#-add_whitelistssh) | Добавляет домены, IPv4-адреса и IPv4/IPv6 CIDR-подсети в whitelist Postfix и Postgrey — по одной записи или массово из файла. Идемпотентно, с бэкапами, dry-run и подключением к Postfix одной командой (`--setup`). | Да |
 | [`refresh_cloud_senders.sh`](#%EF%B8%8F-refresh_cloud_senderssh) | Автоматически генерирует актуальные диапазоны облачных провайдеров, рекурсивно разворачивая их SPF-записи в ip4/ip6 CIDR. Работает в паре с `add_whitelists.sh`. | Нет |
 
 Типовой конвейер:
@@ -81,7 +81,7 @@ sudo ./add_whitelists.sh example.com
 
 Скрипт автоматически:
 
-* определяет, является ли запись доменом, IPv4-адресом или IPv4 CIDR-подсетью;
+* определяет, является ли запись доменом, IPv4-адресом или IPv4/IPv6 CIDR-подсетью;
 * направляет её в соответствующий whitelist;
 * пропускает существующие записи;
 * создаёт резервные копии с таймстампом;
@@ -106,7 +106,8 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 
 | Возможность                     | Описание                                                                           |
 | ------------------------------- | ---------------------------------------------------------------------------------- |
-| 🎯 Автоматическая маршрутизация | Домены, IPv4-адреса и CIDR-подсети отправляются в нужный whitelist                 |
+| 🎯 Автоматическая маршрутизация | Домены, IPv4-адреса и IPv4/IPv6 CIDR-подсети отправляются в нужный whitelist       |
+| 🔌 Подключение одной командой   | `--setup` вписывает whitelist-карты в `smtpd_recipient_restrictions`; `--check` проверяет подключение |
 | 📄 Одиночный и файловый режимы  | Можно обработать одну запись или загрузить сотни записей из файла                  |
 | ♻️ Идемпотентность              | Существующие записи определяются и пропускаются                                    |
 | 🔍 Режим dry-run                | Показывает запланированные изменения без модификации файлов и перезапуска сервисов |
@@ -121,24 +122,54 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 
 Два whitelist-файла выполняют разные задачи, поэтому записи маршрутизируются автоматически.
 
-| Тип записи         | Пример            |       Postfix       |       Postgrey      |
-| ------------------ | ----------------- | :-----------------: | :-----------------: |
-| Домен или hostname | `example.com`     |  ✅ `example.com OK` |   ✅ `example.com`   |
-| IPv4-адрес         | `203.0.113.10`    | ✅ `203.0.113.10 OK` |   ✅ `203.0.113.10`  |
-| IPv4 CIDR-подсеть  | `198.51.100.0/24` |          ❌          | ✅ `198.51.100.0/24` |
+| Тип записи         | Пример            |            Postfix            |       Postgrey      |
+| ------------------ | ----------------- | :---------------------------: | :-----------------: |
+| Домен или hostname | `example.com`     | ✅ hash: `example.com OK`      |   ✅ `example.com`   |
+| IPv4-адрес         | `203.0.113.10`    | ✅ hash: `203.0.113.10 OK`     |   ✅ `203.0.113.10`  |
+| IPv4 CIDR-подсеть  | `198.51.100.0/24` | ✅ cidr: `198.51.100.0/24 OK`  | ✅ `198.51.100.0/24` |
+| IPv6 CIDR-подсеть  | `2001:db8::/32`   | ✅ cidr: `2001:db8::/32 OK`    |  ✅ `2001:db8::/32`  |
 
 > [!NOTE]
-> `hash:`-карты Postfix не поддерживают CIDR-подсети. Поэтому CIDR-записи добавляются только в Postgrey.
+> `hash:`-карты Postfix не поддерживают CIDR-подсети, поэтому CIDR-записи (IPv4 и IPv6) попадают в отдельную `cidr:`-карту, которую Postfix перечитывает при каждом reload.
 
 > [!IMPORTANT]
-> `add_whitelists.sh` валидирует только IPv4. Поддерживаются домены, IPv4-адреса и IPv4 CIDR; IPv6 не поддерживается. IPv6-диапазоны помечаются как некорректные записи (см. примечание в разделе `refresh_cloud_senders.sh`).
+> Postfix-карты начинают работать только после однократного запуска `sudo add_whitelists.sh --setup` — он вписывает обе карты в `smtpd_recipient_restrictions` (см. [Подключение к Postfix](#-подключение-к-postfix----setup----check)). Whitelisting на уровне Postgrey работает и без `--setup`.
 
 #### Управляемые файлы
 
-| Сервис   | Файл                                    |
-| -------- | --------------------------------------- |
-| Postfix  | `/etc/postfix/client_whitelist`         |
-| Postgrey | `/etc/postgrey/whitelist_clients.local` |
+| Сервис   | Файл                                    | Тип карты |
+| -------- | --------------------------------------- | --------- |
+| Postfix  | `/etc/postfix/client_whitelist`         | `hash:`   |
+| Postfix  | `/etc/postfix/client_whitelist_cidr`    | `cidr:`   |
+| Postgrey | `/etc/postgrey/whitelist_clients.local` | —         |
+
+### 🔌 Подключение к Postfix — `--setup` / `--check`
+
+Самих записей в whitelist-файлах недостаточно: Postfix нужно указать, что эти файлы вообще следует читать. `--setup` делает это один раз и идемпотентно:
+
+```bash
+sudo add_whitelists.sh --setup
+```
+
+Команда вставляет
+
+```text
+check_client_access hash:/etc/postfix/client_whitelist,
+check_client_access cidr:/etc/postfix/client_whitelist_cidr
+```
+
+в `smtpd_recipient_restrictions` **непосредственно перед первым `check_policy_service`** (policy-демон Postgrey). Позиция принципиальна: клиент из whitelist обходит greylisting, но по-прежнему проходит RBL-проверки и `reject_unlisted_recipient` (не может слать на несуществующие ящики). Существующая цепочка restrictions сохраняется как есть — ничего не хардкодится и не заменяется.
+
+`--setup` можно запускать повторно в любой момент: если обе карты уже подключены, он ничего не делает. Файлы карт (и hash `.db`) создаются *до* `postfix reload`, поэтому reload не упадёт на отсутствующей карте.
+
+Проверка текущего состояния:
+
+```bash
+add_whitelists.sh --check    # exit 0 = подключено, exit 2 = нет
+```
+
+> [!WARNING]
+> Обновления Mail-in-a-Box могут перегенерировать `main.cf` и затереть `smtpd_recipient_restrictions`. После каждого обновления MIAB запускайте `--setup` (или хотя бы `--check`). Скрипт также сам напоминает об этом, если записи добавлены, а карты не подключены.
 
 ### 🚀 Быстрый старт
 
@@ -174,9 +205,12 @@ sudo add_whitelists.sh example.com                       # добавить до
 sudo add_whitelists.sh mail.example.net                  # добавить почтовый hostname
 sudo add_whitelists.sh 203.0.113.10                      # добавить IPv4-адрес
 sudo add_whitelists.sh 198.51.100.0/24                   # добавить IPv4 CIDR-подсеть
+sudo add_whitelists.sh 2001:db8::/32                     # добавить IPv6 CIDR-подсеть
 sudo add_whitelists.sh -f examples/whitelist.example.txt # импортировать файл
 sudo add_whitelists.sh -n example.com                    # проверить одну запись
 sudo add_whitelists.sh -n -f examples/whitelist.example.txt  # проверить весь файл
+sudo add_whitelists.sh --setup                           # подключить карты к Postfix (однократно)
+add_whitelists.sh --check                                # проверить подключение к Postfix
 add_whitelists.sh -h                                     # показать справку
 add_whitelists.sh --help                                 # показать справку
 add_whitelists.sh --version                              # показать версию скрипта
@@ -188,12 +222,16 @@ add_whitelists.sh --version                              # показать ве
 Использование:
   add_whitelists.sh [-n] ENTRY
   add_whitelists.sh [-n] -f FILE
+  add_whitelists.sh --setup
+  add_whitelists.sh --check
 
 Параметры:
   -f FILE      Прочитать записи из файла
   -n           Dry-run: показать результат без применения изменений
   -h           Показать справку
   --help       Показать справку
+  --setup      Вписать whitelist-карты в restrictions Postfix (идемпотентно)
+  --check      Показать статус подключения к Postfix (exit 0 = подключено, 2 = нет)
   --version    Показать версию скрипта
 ```
 
@@ -214,6 +252,9 @@ mail.example.net
 
 # IPv4 CIDR-подсети
 198.51.100.0/24
+
+# IPv6 CIDR-подсети
+2001:db8::/32
 ```
 
 Обработчик:
@@ -226,7 +267,7 @@ mail.example.net
 * пропускает уже существующие записи.
 
 > [!NOTE]
-> Текущая версия поддерживает домены, IPv4-адреса и IPv4 CIDR-подсети. IPv6 пока не поддерживается.
+> Поддерживаемые типы записей: домены, IPv4-адреса, IPv4 CIDR и IPv6 CIDR-подсети. Одиночные IPv6-адреса пока не поддерживаются — добавляйте их как CIDR `/128` (например, `2001:db8::1/128`).
 
 ### 🔄 Что происходит при запуске
 
@@ -239,9 +280,9 @@ mail.example.net
   ▼
 Определение типа записи
   │
-  ├── Домен ────────► Postfix + Postgrey
-  ├── IPv4 ─────────► Postfix + Postgrey
-  └── IPv4 CIDR ────► только Postgrey
+  ├── Домен ────────► Postfix hash + Postgrey
+  ├── IPv4 ─────────► Postfix hash + Postgrey
+  └── CIDR v4/v6 ───► Postfix cidr + Postgrey
   │
   ▼
 Пропуск существующих записей
@@ -249,8 +290,9 @@ mail.example.net
   ▼
 Применение только реальных изменений
   │
-  ├── Изменён Postfix ─► postmap + перезапуск Postfix
-  └── Изменён Postgrey ─► перезапуск Postgrey
+  ├── Изменён Postfix hash ─► postmap + reload Postfix
+  ├── Изменён Postfix cidr ─► reload Postfix
+  └── Изменён Postgrey ─────► перезапуск Postgrey
 ```
 
 Во время каждого запуска скрипт:
@@ -272,6 +314,7 @@ mail.example.net
 
 ```text
 /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HHMMSS
+/etc/postfix/client_whitelist_cidr.bak_YYYY-MM-DD_HHMMSS
 /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HHMMSS
 ```
 
@@ -353,8 +396,9 @@ sudo add_whitelists.sh -n -f whitelist.txt
 | `ERROR: Run as root or with sudo` | Запустите через `sudo`. |
 | `File not found: ...` | Проверьте путь через `ls -lah`, затем передайте абсолютный путь в `-f`. |
 | Запись не была добавлена | Скорее всего, она уже существует — `grep -F "example.com" /etc/postfix/client_whitelist`. Также проверьте журнал. |
-| CIDR отсутствует в Postfix | Это ожидаемо — `hash:`-карты Postfix не поддерживают CIDR, поэтому CIDR идёт только в Postgrey. |
-| Изменения Postfix не применились | `sudo postmap /etc/postfix/client_whitelist && sudo systemctl restart postfix`. |
+| Клиент из whitelist всё равно попадает под greylisting | Скорее всего, карты не подключены к Postfix — выполните `add_whitelists.sh --check`, затем `sudo add_whitelists.sh --setup`. |
+| Подключение пропало после обновления MIAB | MIAB перегенерировал `main.cf`. Запустите `sudo add_whitelists.sh --setup` ещё раз. |
+| Изменения Postfix не применились | `sudo postmap /etc/postfix/client_whitelist && sudo postfix reload`. |
 
 Проверка скрипта перед запуском:
 
@@ -422,7 +466,7 @@ sudo ./add_whitelists.sh -f new.txt
 ```
 
 > [!IMPORTANT]
-> `refresh_cloud_senders.sh` выдаёт диапазоны и IPv4, и IPv6, но `add_whitelists.sh` валидирует только IPv4. Когда вы подаёте сгенерированный файл в `add_whitelists.sh`, IPv4 CIDR-диапазоны направляются в Postgrey, а любые IPv6-диапазоны помечаются как некорректные записи и пропускаются. Секция IPv6 включена для справки и ручного использования в Postgrey.
+> `refresh_cloud_senders.sh` выдаёт диапазоны и IPv4, и IPv6, и начиная с v2.1 `add_whitelists.sh` принимает оба типа: каждый CIDR-диапазон (v4 и v6) направляется в `cidr:`-карту Postfix и в Postgrey. Сгенерированный файл можно подавать в `add_whitelists.sh -f` целиком — ничего не пропускается.
 
 ### Провайдеры по умолчанию
 
