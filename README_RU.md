@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Версия" src="https://img.shields.io/badge/version-2.1-1f6feb?style=for-the-badge">
+  <img alt="Версия" src="https://img.shields.io/badge/version-2.2-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="Лицензия MIT" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -108,6 +108,9 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 | ------------------------------- | ---------------------------------------------------------------------------------- |
 | 🎯 Автоматическая маршрутизация | Домены, IPv4-адреса и IPv4/IPv6 CIDR-подсети отправляются в нужный whitelist       |
 | 🔌 Подключение одной командой   | `--setup` вписывает whitelist-карты в `smtpd_recipient_restrictions`; `--check` проверяет подключение |
+| 🗑 Удаление записей             | `--remove ENTRY` удаляет запись из всех whitelist-файлов и перезагружает только затронутые сервисы |
+| 🔍 Живая проверка               | `--verify ENTRY` опрашивает реальные карты Postfix (`postmap -q`, вхождение в CIDR) и Postgrey |
+| 📋 Обзор состояния              | `--list` печатает все whitelist-файлы со счётчиками, датами изменения и статусом подключения |
 | 📄 Одиночный и файловый режимы  | Можно обработать одну запись или загрузить сотни записей из файла                  |
 | ♻️ Идемпотентность              | Существующие записи определяются и пропускаются                                    |
 | 🔍 Режим dry-run                | Показывает запланированные изменения без модификации файлов и перезапуска сервисов |
@@ -128,6 +131,7 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 | IPv4-адрес         | `203.0.113.10`    | ✅ hash: `203.0.113.10 OK`     |   ✅ `203.0.113.10`  |
 | IPv4 CIDR-подсеть  | `198.51.100.0/24` | ✅ cidr: `198.51.100.0/24 OK`  | ✅ `198.51.100.0/24` |
 | IPv6 CIDR-подсеть  | `2001:db8::/32`   | ✅ cidr: `2001:db8::/32 OK`    |  ✅ `2001:db8::/32`  |
+| IPv6-адрес         | `2001:db8::15`    | ✅ cidr: `2001:db8::15 OK`     |  ✅ `2001:db8::15`   |
 
 > [!NOTE]
 > `hash:`-карты Postfix не поддерживают CIDR-подсети, поэтому CIDR-записи (IPv4 и IPv6) попадают в отдельную `cidr:`-карту, которую Postfix перечитывает при каждом reload.
@@ -211,6 +215,9 @@ sudo add_whitelists.sh -n example.com                    # проверить о
 sudo add_whitelists.sh -n -f examples/whitelist.example.txt  # проверить весь файл
 sudo add_whitelists.sh --setup                           # подключить карты к Postfix (однократно)
 add_whitelists.sh --check                                # проверить подключение к Postfix
+add_whitelists.sh --list                                 # показать текущее состояние whitelist'ов
+add_whitelists.sh --verify 203.0.113.10                  # этот клиент реально в whitelist?
+sudo add_whitelists.sh --remove example.com              # удалить из всех whitelist'ов
 add_whitelists.sh -h                                     # показать справку
 add_whitelists.sh --help                                 # показать справку
 add_whitelists.sh --version                              # показать версию скрипта
@@ -224,6 +231,9 @@ add_whitelists.sh --version                              # показать ве
   add_whitelists.sh [-n] -f FILE
   add_whitelists.sh --setup
   add_whitelists.sh --check
+  add_whitelists.sh --list
+  add_whitelists.sh --remove ENTRY
+  add_whitelists.sh --verify ENTRY
 
 Параметры:
   -f FILE      Прочитать записи из файла
@@ -232,6 +242,9 @@ add_whitelists.sh --version                              # показать ве
   --help       Показать справку
   --setup      Вписать whitelist-карты в restrictions Postfix (идемпотентно)
   --check      Показать статус подключения к Postfix (exit 0 = подключено, 2 = нет)
+  --list       Показать все whitelist-файлы, счётчики и статус подключения
+  --remove     Удалить ENTRY из всех whitelist-файлов (exit 1, если не найдена)
+  --verify     Проверить, действительно ли ENTRY в whitelist (exit 0 = да)
   --version    Показать версию скрипта
 ```
 
@@ -267,7 +280,7 @@ mail.example.net
 * пропускает уже существующие записи.
 
 > [!NOTE]
-> Поддерживаемые типы записей: домены, IPv4-адреса, IPv4 CIDR и IPv6 CIDR-подсети. Одиночные IPv6-адреса пока не поддерживаются — добавляйте их как CIDR `/128` (например, `2001:db8::1/128`).
+> Поддерживаемые типы записей: домены, IPv4/IPv6-адреса, IPv4/IPv6 CIDR-подсети. Одиночные IPv6-адреса попадают в `cidr:`-карту и матчатся как адрес полной длины.
 
 ### 🔄 Что происходит при запуске
 
@@ -400,11 +413,18 @@ sudo add_whitelists.sh -n -f whitelist.txt
 | Подключение пропало после обновления MIAB | MIAB перегенерировал `main.cf`. Запустите `sudo add_whitelists.sh --setup` ещё раз. |
 | Изменения Postfix не применились | `sudo postmap /etc/postfix/client_whitelist && sudo postfix reload`. |
 
-Проверка скрипта перед запуском:
+Для разбора конкретного отправителя спрашивайте реальные карты Postfix, а не grep по файлам:
+
+```bash
+add_whitelists.sh --verify 203.0.113.10
+```
+
+Проверка скриптов перед запуском:
 
 ```bash
 bash -n add_whitelists.sh
 shellcheck add_whitelists.sh
+sudo bash tests/run_tests.sh    # функциональные тесты в песочнице (систему не трогают)
 ```
 
 ---
@@ -432,12 +452,14 @@ sudo yum install bind-utils    # RHEL / CentOS / Fedora
 
 ```text
 Использование:
-  refresh_cloud_senders.sh [-o OUTPUT] [-d EXISTING] [-h]
+  refresh_cloud_senders.sh [-o OUTPUT] [-d EXISTING] [--apply] [-h]
 
 Параметры:
   -o OUTPUT    Файл вывода (по умолчанию: cloud_senders.generated.txt)
   -d EXISTING  Diff-режим: сравнить с существующим whitelist и вывести
                ТОЛЬКО новые диапазоны (которых там ещё нет).
+  --apply      Сразу применить результат через add_whitelists.sh -f
+               (требует root; в diff-режиме применяются только новые диапазоны)
   -h           Показать справку
   --version    Показать версию скрипта
 ```

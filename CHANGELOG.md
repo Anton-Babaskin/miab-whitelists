@@ -6,6 +6,28 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.2.0] – 2026-07-19
+### Added
+- **`--remove ENTRY`** — removes an entry from all three whitelist files
+  (Postfix hash, Postfix cidr, Postgrey) with backups, then rebuilds/reloads
+  only what actually changed. Exit 1 if the entry was not found anywhere.
+- **`--verify ENTRY`** — answers "is this client actually whitelisted?":
+  queries the hash map via `postmap -q`, checks real CIDR containment for
+  addresses via the cidr map, checks Postgrey, and reports whether the maps
+  are wired into Postfix. Exit 0 = whitelisted at Postfix level, 1 = not.
+- **`--list`** — prints all three whitelist files with entry counters and
+  modification times, plus the current Postfix integration status.
+- **Bare IPv6 addresses** are now accepted (e.g. `2001:db8::15`) and routed
+  to the cidr map (matched as a full-length address) + Postgrey.
+- **Functional test suite** (`tests/run_tests.sh`) — 37 sandboxed checks
+  covering routing, dry-run, duplicates, `--setup` idempotency, partial
+  wiring, `--remove`, `--verify` and `--list`; runs in CI on every push
+  alongside ShellCheck (workflow renamed to "CI" with a test job).
+- **`refresh_cloud_senders.sh` v1.2: `--apply`** — feeds the generated list
+  straight into `add_whitelists.sh -f` (in diff mode only the new ranges are
+  applied; skipped when there is nothing new). Requires root; the location of
+  `add_whitelists.sh` is resolved before generation starts.
+
 ## [2.1.0] – 2026-07-19
 ### Added
 - **`--setup` — one-command Postfix integration.** Idempotently wires

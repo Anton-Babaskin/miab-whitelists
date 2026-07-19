@@ -1,4 +1,4 @@
-name: ShellCheck
+name: CI
 
 on:
   push:
@@ -14,14 +14,31 @@ permissions:
 
 jobs:
   lint:
-    name: Lint add_whitelists.sh
+    name: Lint shell scripts
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Bash syntax check
-        run: bash -n add_whitelists.sh
+        run: |
+          bash -n add_whitelists.sh
+          bash -n refresh_cloud_senders.sh
+          bash -n tests/run_tests.sh
 
       - name: ShellCheck
-        run: shellcheck add_whitelists.sh
+        run: |
+          shellcheck add_whitelists.sh
+          shellcheck refresh_cloud_senders.sh
+          shellcheck tests/run_tests.sh
+
+  test:
+    name: Functional tests (sandboxed)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run test suite
+        run: sudo env "PATH=$PATH" bash tests/run_tests.sh

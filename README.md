@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-2.1-1f6feb?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.2-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="MIT License" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -108,6 +108,9 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 | --------------------------- | --------------------------------------------------------------------------- |
 | 🎯 Automatic routing        | Domains, IPv4 addresses and IPv4/IPv6 CIDR networks are sent to the correct whitelist |
 | 🔌 One-command integration  | `--setup` wires the whitelist maps into `smtpd_recipient_restrictions`; `--check` verifies the wiring |
+| 🗑 Entry removal            | `--remove ENTRY` deletes an entry from all whitelist files and reloads only affected services |
+| 🔍 Live verification        | `--verify ENTRY` queries the actual Postfix maps (`postmap -q`, CIDR containment) and Postgrey |
+| 📋 State overview           | `--list` prints all whitelist files with counters, mtimes and integration status |
 | 📄 Single or bulk input     | Process one entry or load hundreds of entries from a file                   |
 | ♻️ Idempotent operation     | Existing entries are detected and skipped                                   |
 | 🔍 Dry-run mode             | Preview planned changes without modifying files or restarting services      |
@@ -128,6 +131,7 @@ The two whitelist files serve different purposes, so entries are routed automati
 | IPv4 address        | `203.0.113.10`    | ✅ hash: `203.0.113.10 OK`     |   ✅ `203.0.113.10`  |
 | IPv4 CIDR network   | `198.51.100.0/24` | ✅ cidr: `198.51.100.0/24 OK`  | ✅ `198.51.100.0/24` |
 | IPv6 CIDR network   | `2001:db8::/32`   | ✅ cidr: `2001:db8::/32 OK`    |  ✅ `2001:db8::/32`  |
+| IPv6 address        | `2001:db8::15`    | ✅ cidr: `2001:db8::15 OK`     |  ✅ `2001:db8::15`   |
 
 > [!NOTE]
 > Postfix `hash:` maps do not support CIDR networks, so CIDR entries (IPv4 and IPv6) go into a separate `cidr:` map, which Postfix re-reads on every reload.
@@ -211,6 +215,9 @@ sudo add_whitelists.sh -n example.com                    # preview a single entr
 sudo add_whitelists.sh -n -f examples/whitelist.example.txt  # preview a whole file
 sudo add_whitelists.sh --setup                           # wire maps into Postfix (once)
 add_whitelists.sh --check                                # verify Postfix integration
+add_whitelists.sh --list                                 # show current whitelist state
+add_whitelists.sh --verify 203.0.113.10                  # is this client whitelisted?
+sudo add_whitelists.sh --remove example.com              # remove from all whitelists
 add_whitelists.sh -h                                     # show help
 add_whitelists.sh --help                                 # show help
 add_whitelists.sh --version                              # show the script version
@@ -224,6 +231,9 @@ Usage:
   add_whitelists.sh [-n] -f FILE
   add_whitelists.sh --setup
   add_whitelists.sh --check
+  add_whitelists.sh --list
+  add_whitelists.sh --remove ENTRY
+  add_whitelists.sh --verify ENTRY
 
 Options:
   -f FILE      Read entries from a file
@@ -232,6 +242,9 @@ Options:
   --help       Show help
   --setup      Wire whitelist maps into Postfix restrictions (idempotent)
   --check      Show Postfix integration status (exit 0 = wired, 2 = not wired)
+  --list       Show all whitelist files, counters and integration status
+  --remove     Remove ENTRY from all whitelist files (exit 1 if not found)
+  --verify     Check whether ENTRY is actually whitelisted (exit 0 = yes)
   --version    Show the script version
 ```
 
@@ -267,7 +280,7 @@ The parser:
 * skips entries that already exist.
 
 > [!NOTE]
-> Supported entry types: domains, IPv4 addresses, IPv4 CIDR and IPv6 CIDR networks. Bare IPv6 addresses are not yet supported — whitelist them as a `/128` CIDR (e.g. `2001:db8::1/128`).
+> Supported entry types: domains, IPv4/IPv6 addresses, IPv4/IPv6 CIDR networks. Bare IPv6 addresses go to the `cidr:` map, where they match as a full-length address.
 
 ### 🔄 What happens during a run
 
@@ -400,11 +413,18 @@ This repository intentionally contains no production corporate whitelist.
 | Integration lost after a MIAB update | MIAB regenerated `main.cf`. Re-run `sudo add_whitelists.sh --setup`. |
 | Postfix changes not active | `sudo postmap /etc/postfix/client_whitelist && sudo postfix reload`. |
 
-Validate the script before running it:
+To debug a specific sender, ask the actual Postfix maps instead of grepping files:
+
+```bash
+add_whitelists.sh --verify 203.0.113.10
+```
+
+Validate the scripts before running them:
 
 ```bash
 bash -n add_whitelists.sh
 shellcheck add_whitelists.sh
+sudo bash tests/run_tests.sh    # sandboxed functional test suite (no system changes)
 ```
 
 ---
@@ -432,12 +452,14 @@ sudo yum install bind-utils    # RHEL / CentOS / Fedora
 
 ```text
 Usage:
-  refresh_cloud_senders.sh [-o OUTPUT] [-d EXISTING] [-h]
+  refresh_cloud_senders.sh [-o OUTPUT] [-d EXISTING] [--apply] [-h]
 
 Options:
   -o OUTPUT    Output file (default: cloud_senders.generated.txt)
   -d EXISTING  Diff mode: compare against an existing whitelist and print
                ONLY the new ranges (those not already present).
+  --apply      Immediately feed the result to add_whitelists.sh -f
+               (requires root; in diff mode only the new ranges are applied)
   -h           Show help
   --version    Show the script version
 ```
@@ -447,6 +469,7 @@ Options:
 ./refresh_cloud_senders.sh -o ranges.txt            # custom output path
 ./refresh_cloud_senders.sh -d whitelist.txt         # show only ranges new to your whitelist
 ./refresh_cloud_senders.sh -d whitelist.txt -o new.txt
+sudo ./refresh_cloud_senders.sh -d /etc/postfix/client_whitelist_cidr --apply   # one-step update
 ./refresh_cloud_senders.sh --version
 ```
 

@@ -12,11 +12,12 @@
 #   ./refresh_cloud_senders.sh -o ranges.txt         # свой путь вывода
 #   ./refresh_cloud_senders.sh -d whitelist.txt      # diff: показать только НОВЫЕ диапазоны
 #   ./refresh_cloud_senders.sh -d whitelist.txt -o new.txt
+#   ./refresh_cloud_senders.sh -d whitelist.txt --apply   # diff + сразу применить новые
 #
 # НЕ используем set -e — ломается на grep с exit code 1.
 set -uo pipefail
 
-VERSION="1.1"
+VERSION="1.2"
 
 # ============================================================================
 # CONFIG — провайдеры, чьи SPF разворачиваем. Добавляй своих по аналогии.
@@ -57,6 +58,8 @@ Options:
   -o OUTPUT    Файл вывода (по умолчанию: cloud_senders.generated.txt)
   -d EXISTING  Diff-режим: сравнить с существующим whitelist и вывести
                ТОЛЬКО новые диапазоны (которых там ещё нет).
+  --apply      Сразу применить результат через add_whitelists.sh -f
+               (требует root; в diff-режиме применяются только новые диапазоны)
   -h           Эта справка
   --version    Версия
 
@@ -64,6 +67,7 @@ Options:
   refresh_cloud_senders.sh
   refresh_cloud_senders.sh -d whitelist.txt          # что нового у провайдеров
   refresh_cloud_senders.sh -d whitelist.txt -o new.txt
+  sudo refresh_cloud_senders.sh -d whitelist.txt --apply
 EOF
   exit "${1:-1}"
 }
@@ -71,12 +75,17 @@ EOF
 # ============================================================================
 # Аргументы
 # ============================================================================
+APPLY=0
+ARGS=()
 for a in "$@"; do
   case "$a" in
     --version) printf 'refresh_cloud_senders.sh v%s\n' "$VERSION"; exit 0 ;;
     --help)    usage 0 ;;
+    --apply)   APPLY=1 ;;
+    *)         ARGS+=( "$a" ) ;;
   esac
 done
+set -- ${ARGS[@]+"${ARGS[@]}"}
 
 OUTPUT_FILE="cloud_senders.generated.txt"
 DIFF_FILE=""
@@ -94,6 +103,19 @@ done
 # ============================================================================
 command -v dig >/dev/null 2>&1 || die "Нужен 'dig' (apt install dnsutils / yum install bind-utils)."
 [ -n "$DIFF_FILE" ] && [ ! -f "$DIFF_FILE" ] && die "Diff-файл не найден: $DIFF_FILE"
+
+# --apply: находим add_whitelists.sh заранее, чтобы не падать после генерации
+ADD_SCRIPT=""
+if [ "$APPLY" -eq 1 ]; then
+  [ "$(id -u)" -eq 0 ] || die "--apply требует root (запусти через sudo)."
+  if command -v add_whitelists.sh >/dev/null 2>&1; then
+    ADD_SCRIPT="$(command -v add_whitelists.sh)"
+  elif [ -x "$(dirname "$0")/add_whitelists.sh" ]; then
+    ADD_SCRIPT="$(dirname "$0")/add_whitelists.sh"
+  else
+    die "--apply: add_whitelists.sh не найден ни в PATH, ни рядом со скриптом."
+  fi
+fi
 
 # ============================================================================
 # Состояние
@@ -213,10 +235,20 @@ if [ -n "$DIFF_FILE" ]; then
     # shellcheck disable=SC2086
     for ip in ${NEW_IP4[@]+"${NEW_IP4[@]}"} ${NEW_IP6[@]+"${NEW_IP6[@]}"}; do msg "   ${C_G}+ $ip${C_RST}"; done
     msg ""
-    msg "   Применить новые:  ${C_Y}sudo add_whitelists.sh -f $OUTPUT_FILE${C_RST}"
+    if [ "$APPLY" -eq 1 ]; then
+      msg "🚀 ${C_B}--apply:${C_RST} применяю новые диапазоны через add_whitelists.sh"
+      "$ADD_SCRIPT" -f "$OUTPUT_FILE" || die "--apply: add_whitelists.sh завершился с ошибкой."
+    else
+      msg "   Применить новые:  ${C_Y}sudo add_whitelists.sh -f $OUTPUT_FILE${C_RST}"
+    fi
   fi
 else
   msg "${C_G}✅ Готово.${C_RST} ip4=${C_C}${#UNIQ_IP4[@]}${C_RST}, ip6=${C_C}${#UNIQ_IP6[@]}${C_RST} → ${C_B}$OUTPUT_FILE${C_RST}"
-  msg "   Просмотри:  ${C_Y}less $OUTPUT_FILE${C_RST}"
-  msg "   Применить:  ${C_Y}sudo add_whitelists.sh -f $OUTPUT_FILE${C_RST}"
+  if [ "$APPLY" -eq 1 ]; then
+    msg "🚀 ${C_B}--apply:${C_RST} применяю полный список через add_whitelists.sh"
+    "$ADD_SCRIPT" -f "$OUTPUT_FILE" || die "--apply: add_whitelists.sh завершился с ошибкой."
+  else
+    msg "   Просмотри:  ${C_Y}less $OUTPUT_FILE${C_RST}"
+    msg "   Применить:  ${C_Y}sudo add_whitelists.sh -f $OUTPUT_FILE${C_RST}"
+  fi
 fi

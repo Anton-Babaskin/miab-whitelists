@@ -15,11 +15,14 @@
 #   ./add_whitelists.sh -n -f whitelists.txt   # dry-run
 #   ./add_whitelists.sh --setup                # wire maps into Postfix restrictions
 #   ./add_whitelists.sh --check                # verify Postfix integration status
+#   ./add_whitelists.sh --list                 # show current whitelist contents
+#   ./add_whitelists.sh --remove ENTRY         # remove an entry from all whitelists
+#   ./add_whitelists.sh --verify ENTRY         # is this entry actually whitelisted?
 #   ./add_whitelists.sh --version
 
 set -Eeuo pipefail
 
-VERSION="2.1"
+VERSION="2.2"
 
 POSTFIX_FILE="/etc/postfix/client_whitelist"
 CIDR_FILE="/etc/postfix/client_whitelist_cidr"
@@ -62,6 +65,9 @@ Usage:
   add_whitelists.sh [-n] -f <file_with_entries>
   add_whitelists.sh --setup     Wire whitelist maps into Postfix (idempotent)
   add_whitelists.sh --check     Show Postfix integration status
+  add_whitelists.sh --list      Show current whitelist contents and counters
+  add_whitelists.sh --remove ENTRY   Remove an entry from all whitelist files
+  add_whitelists.sh --verify ENTRY   Check whether an entry is actually whitelisted
   add_whitelists.sh --version   Show script version
 
 Options:
@@ -70,9 +76,10 @@ Options:
   -h           Show this help
 
 Routing:
-  Domain     -> Postfix hash + Postgrey
-  IP         -> Postfix hash + Postgrey
-  CIDR v4/v6 -> Postfix cidr-map + Postgrey
+  Domain       -> Postfix hash + Postgrey
+  IPv4         -> Postfix hash + Postgrey
+  IPv6         -> Postfix cidr-map + Postgrey
+  CIDR v4/v6   -> Postfix cidr-map + Postgrey
 
 NOTE: Postfix maps take effect only after --setup has been run once
       (adds check_client_access to smtpd_recipient_restrictions).
@@ -176,33 +183,135 @@ do_setup() {
   exit 0
 }
 
-# --- arg parsing ---
-# Handle long options first (getopts handles only short ones).
-for arg in "$@"; do
-  case "$arg" in
-    --version) printf 'add_whitelists.sh v%s\n' "$VERSION"; exit 0 ;;
-    --help)    usage ;;
-    --setup)   prepare_log; do_setup ;;
-    --check)   do_check ;;
-  esac
-done
+list_one_file() {
+  # Print counters, mtime and entries of a single whitelist file.
+  local path="$1" label="$2" count mtime
+  msg ""
+  if [ ! -f "$path" ]; then
+    msg "📄 ${C_BOLD}${label}${C_RESET} — ${path}: ${C_YELL}file does not exist${C_RESET}"
+    return 0
+  fi
+  count="$(grep -cvE '^[[:space:]]*(#|$)' "$path" 2>/dev/null || true)"
+  mtime="$(date -r "$path" '+%F %T' 2>/dev/null || echo '?')"
+  msg "📄 ${C_BOLD}${label}${C_RESET} — ${path} (${C_CYAN}${count}${C_RESET} entries, modified ${mtime})"
+  if [ "$count" -gt 0 ]; then
+    grep -vE '^[[:space:]]*(#|$)' "$path" | sed 's/^/   /'
+  fi
+}
 
-DRY=0
-LIST_FILE=""
-while getopts ":f:nh" opt; do
-  case "$opt" in
-    f) LIST_FILE="$OPTARG" ;;
-    n) DRY=1 ;;
-    h) usage ;;
-    *) usage ;;
-  esac
-done
-shift $((OPTIND - 1))
-SINGLE_TARGET="${1:-}"
+do_list() {
+  msg "🔧 add_whitelists.sh v${VERSION} — current whitelist state"
+  list_one_file "$POSTFIX_FILE"  "Postfix hash map"
+  list_one_file "$CIDR_FILE"     "Postfix cidr map"
+  list_one_file "$POSTGREY_FILE" "Postgrey whitelist"
+  msg ""
+  local st
+  st="$(integration_status)"
+  if [ "$st" = "1 1" ]; then
+    msg "🔌 Postfix integration: ${C_GREEN}wired${C_RESET} (both maps in smtpd_recipient_restrictions)"
+  else
+    msg "🔌 Postfix integration: ${C_YELL}NOT wired${C_RESET} — run: sudo add_whitelists.sh --setup"
+  fi
+  exit 0
+}
 
-if [ -z "$SINGLE_TARGET" ] && [ -z "$LIST_FILE" ]; then
-  usage
-fi
+remove_from_file() {
+  # Remove a normalized entry from one whitelist file. Returns 0 if removed.
+  local entry="$1" path="$2" esc tmp
+  [ -f "$path" ] || return 1
+  already_in_file "$entry" "$path" || return 1
+  backup_if_exists "$path"
+  esc="${entry//./\\.}"
+  esc="${esc//\//\\/}"
+  tmp="$(mktemp)"
+  grep -vE -- "^${esc}([[:space:]]|$)" "$path" > "$tmp" || true
+  cat "$tmp" > "$path"   # keep inode/permissions
+  rm -f "$tmp"
+  return 0
+}
+
+do_remove() {
+  local raw="$1" entry rm_pf=0 rm_cidr=0 rm_pg=0
+  entry="$(trim_lower "$raw")"
+  [ -n "$entry" ] || die "--remove requires a non-empty ENTRY"
+  msg "🔧 add_whitelists.sh v${VERSION} — removing: $entry"
+
+  if remove_from_file "$entry" "$POSTFIX_FILE";  then rm_pf=1;   msg "🗑  Removed from Postfix hash: $entry";  log_line "REMOVE Postfix $entry"; fi
+  if remove_from_file "$entry" "$CIDR_FILE";     then rm_cidr=1; msg "🗑  Removed from Postfix cidr: $entry";  log_line "REMOVE Postfix-cidr $entry"; fi
+  if remove_from_file "$entry" "$POSTGREY_FILE"; then rm_pg=1;   msg "🗑  Removed from Postgrey: $entry";      log_line "REMOVE Postgrey $entry"; fi
+
+  if [ "$rm_pf" -eq 0 ] && [ "$rm_cidr" -eq 0 ] && [ "$rm_pg" -eq 0 ]; then
+    msg "ℹ️ Entry not found in any whitelist file: $entry"
+    exit 1
+  fi
+
+  if [ "$rm_pf" -eq 1 ]; then
+    msg "🧰 postmap $POSTFIX_FILE"
+    postmap "$POSTFIX_FILE"
+  fi
+  if [ "$rm_pf" -eq 1 ] || [ "$rm_cidr" -eq 1 ]; then
+    msg "🔄 Reloading Postfix"
+    postfix reload
+  fi
+  if [ "$rm_pg" -eq 1 ]; then
+    msg "🔄 Restarting Postgrey"; systemctl restart postgrey || true
+  fi
+  msg "✅ ${C_GREEN}Removed.${C_RESET} Postfix=${rm_pf}, Cidr=${rm_cidr}, Postgrey=${rm_pg}"
+  exit 0
+}
+
+do_verify() {
+  local raw="$1" entry hit=0 out
+  entry="$(trim_lower "$raw")"
+  [ -n "$entry" ] || die "--verify requires a non-empty ENTRY"
+  command -v postmap >/dev/null 2>&1 || die "postmap not found — is Postfix installed?"
+  msg "🔎 ${C_BOLD}Verify:${C_RESET} $entry"
+
+  # Postfix hash map (queried the same way smtpd does)
+  if [ -f "${POSTFIX_FILE}.db" ]; then
+    if out="$(postmap -q "$entry" "hash:${POSTFIX_FILE}" 2>/dev/null)"; then
+      msg "   ✅ Postfix hash map: matched (${out})"; hit=1
+    else
+      msg "   ❌ Postfix hash map: no match"
+    fi
+  else
+    msg "   ⚠️  Postfix hash map: ${POSTFIX_FILE}.db missing (run --setup or add an entry first)"
+  fi
+
+  # Postfix cidr map: for addresses postmap -q does real CIDR containment;
+  # for a CIDR entry itself we check literal presence in the file.
+  if [ -f "$CIDR_FILE" ]; then
+    if is_cidr "$entry"; then
+      if already_in_file "$entry" "$CIDR_FILE"; then
+        msg "   ✅ Postfix cidr map: entry present"; hit=1
+      else
+        msg "   ❌ Postfix cidr map: entry not present"
+      fi
+    elif out="$(postmap -q "$entry" "cidr:${CIDR_FILE}" 2>/dev/null)"; then
+      msg "   ✅ Postfix cidr map: covered by a whitelisted range (${out})"; hit=1
+    else
+      msg "   ❌ Postfix cidr map: not covered"
+    fi
+  else
+    msg "   ⚠️  Postfix cidr map: $CIDR_FILE missing"
+  fi
+
+  # Postgrey (exact entry; postgrey itself also matches subdomains/prefixes)
+  if [ -f "$POSTGREY_FILE" ] && already_in_file "$entry" "$POSTGREY_FILE"; then
+    msg "   ✅ Postgrey: entry present"
+  else
+    msg "   ❌ Postgrey: entry not present (note: a parent domain/range may still cover it)"
+  fi
+
+  local st
+  st="$(integration_status)"
+  if [ "$st" = "1 1" ]; then
+    msg "   🔌 Postfix integration: ${C_GREEN}wired${C_RESET}"
+  else
+    msg "   🔌 Postfix integration: ${C_YELL}NOT wired${C_RESET} — Postfix matches above are inactive until --setup"
+  fi
+  [ "$hit" -eq 1 ] && exit 0 || exit 1
+}
 
 ensure_file() {
   # create parent dir and file if missing
@@ -240,6 +349,7 @@ rotate_backups() {
 
 is_domain() { [[ "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$ ]]; }
 is_ipv4()   { [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; }
+is_ipv6()   { [[ "$1" == *:*:* ]] && [[ "$1" =~ ^[0-9A-Fa-f:]+$ ]] && [[ "$1" != *::*::* ]] && [[ "$1" != *:::* ]]; }
 is_cidr4()  { [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; }
 is_cidr6()  { [[ "$1" == *:* ]] && [[ "$1" =~ ^[0-9A-Fa-f:]+/[0-9]{1,3}$ ]]; }
 is_cidr()   { is_cidr4 "$1" || is_cidr6 "$1"; }
@@ -311,6 +421,18 @@ process_entry() {
     else
       log_line "SKIP duplicate (Postgrey) CIDR $entry"
     fi
+  elif is_ipv6 "$entry"; then
+    # Bare IPv6 address: the cidr map matches it as a full-length /128
+    if add_cidr "$entry"; then
+      ADDED_CIDR=$((ADDED_CIDR+1)); touched=1; log_line "ADD Postfix-cidr IPv6 $entry"
+    else
+      log_line "SKIP duplicate (Postfix-cidr) IPv6 $entry"
+    fi
+    if add_postgrey "$entry"; then
+      ADDED_PG=$((ADDED_PG+1)); touched=1; log_line "ADD Postgrey IPv6 $entry"
+    else
+      log_line "SKIP duplicate (Postgrey) IPv6 $entry"
+    fi
   elif is_ipv4 "$entry"; then
     if add_postfix "$entry"; then ADDED_PF=$((ADDED_PF+1)); touched=1; log_line "ADD Postfix IP $entry"; else log_line "SKIP duplicate (Postfix) IP $entry"; fi
     if add_postgrey "$entry"; then ADDED_PG=$((ADDED_PG+1)); touched=1; log_line "ADD Postgrey IP $entry"; else log_line "SKIP duplicate (Postgrey) IP $entry"; fi
@@ -326,6 +448,58 @@ process_entry() {
   [ "$touched" -eq 1 ] && ADDED_ALL+=( "$entry" )
   return 0
 }
+
+# --- arg parsing ---
+# Long options first (getopts handles only short ones). Value-taking long
+# options (--remove/--verify) consume the following argument.
+ACTION=""
+ACTION_ARG=""
+EXPECT_VALUE=0
+for arg in "$@"; do
+  if [ "$EXPECT_VALUE" -eq 1 ]; then
+    ACTION_ARG="$arg"; EXPECT_VALUE=0; continue
+  fi
+  case "$arg" in
+    --version) printf 'add_whitelists.sh v%s\n' "$VERSION"; exit 0 ;;
+    --help)    usage ;;
+    --setup)   ACTION="setup" ;;
+    --check)   ACTION="check" ;;
+    --list)    ACTION="list" ;;
+    --remove)  ACTION="remove"; EXPECT_VALUE=1 ;;
+    --verify)  ACTION="verify"; EXPECT_VALUE=1 ;;
+  esac
+done
+
+DRY=0
+LIST_FILE=""
+if [ -n "$ACTION" ]; then
+  case "$ACTION" in
+    setup)  prepare_log; do_setup ;;
+    check)  do_check ;;
+    list)   do_list ;;
+    remove)
+      [ -n "$ACTION_ARG" ] || die "--remove requires an ENTRY argument"
+      require_root; prepare_log; do_remove "$ACTION_ARG" ;;
+    verify)
+      [ -n "$ACTION_ARG" ] || die "--verify requires an ENTRY argument"
+      do_verify "$ACTION_ARG" ;;
+  esac
+fi
+
+while getopts ":f:nh" opt; do
+  case "$opt" in
+    f) LIST_FILE="$OPTARG" ;;
+    n) DRY=1 ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
+shift $((OPTIND - 1))
+SINGLE_TARGET="${1:-}"
+
+if [ -z "$SINGLE_TARGET" ] && [ -z "$LIST_FILE" ]; then
+  usage
+fi
 
 # ------------ main ------------
 require_root
@@ -392,7 +566,7 @@ if [ "${#ADDED_ALL[@]}" -gt 0 ]; then
   for item in "${ADDED_ALL[@]}"; do
     if is_cidr "$item"; then
       printf '   🧩 %s%s%s\n' "$C_YELL" "$item" "$C_RESET"
-    elif is_ipv4 "$item"; then
+    elif is_ipv4 "$item" || is_ipv6 "$item"; then
       printf '   🌐 %s%s%s\n' "$C_CYAN" "$item" "$C_RESET"
     else
       printf '   🏷  %s%s%s\n' "$C_GREEN" "$item" "$C_RESET"
