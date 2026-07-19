@@ -106,7 +106,7 @@ assert_grep     "cidr6 in postgrey"        '^2001:db8::/32$'          "$PG"
 assert_not_grep "cidr NOT in hash map"     '198\.51\.100'             "$PF"
 assert_grep     "unwired warning shown"    'not wired'                "$SBX/last.out"
 assert_grep     "postfix reloaded"         'STUB postfix reload'      "$SBX/calls.log"
-assert_grep     "postgrey restarted"       'systemctl restart postgrey' "$SBX/calls.log"
+assert_grep     "postgrey reloaded/restarted" 'systemctl (reload|restart) postgrey' "$SBX/calls.log"
 
 echo "# duplicates are a no-op (no reload/restart)"
 : > "$SBX/calls.log"

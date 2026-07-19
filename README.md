@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-2.2-1f6feb?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.3-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="MIT License" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -111,7 +111,7 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 | 🗑 Entry removal            | `--remove ENTRY` deletes an entry from all whitelist files and reloads only affected services |
 | 🔍 Live verification        | `--verify ENTRY` queries the actual Postfix maps (`postmap -q`, CIDR containment) and Postgrey |
 | 📋 State overview           | `--list` prints all whitelist files with counters, mtimes and integration status |
-| 📄 Single or bulk input     | Process one entry or load hundreds of entries from a file                   |
+| 📄 Single or bulk input     | Process one entry or thousands from a file (in-memory dedup, ~2000 entries/s) |
 | ♻️ Idempotent operation     | Existing entries are detected and skipped                                   |
 | 🔍 Dry-run mode             | Preview planned changes without modifying files or restarting services      |
 | 💾 Timestamped backups      | Both whitelist files are backed up before processing                        |

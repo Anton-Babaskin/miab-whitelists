@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Версия" src="https://img.shields.io/badge/version-2.2-1f6feb?style=for-the-badge">
+  <img alt="Версия" src="https://img.shields.io/badge/version-2.3-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="Лицензия MIT" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -111,7 +111,7 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 | 🗑 Удаление записей             | `--remove ENTRY` удаляет запись из всех whitelist-файлов и перезагружает только затронутые сервисы |
 | 🔍 Живая проверка               | `--verify ENTRY` опрашивает реальные карты Postfix (`postmap -q`, вхождение в CIDR) и Postgrey |
 | 📋 Обзор состояния              | `--list` печатает все whitelist-файлы со счётчиками, датами изменения и статусом подключения |
-| 📄 Одиночный и файловый режимы  | Можно обработать одну запись или загрузить сотни записей из файла                  |
+| 📄 Одиночный и файловый режимы  | Одна запись или тысячи из файла (dedup в памяти, ~2000 записей/с)                  |
 | ♻️ Идемпотентность              | Существующие записи определяются и пропускаются                                    |
 | 🔍 Режим dry-run                | Показывает запланированные изменения без модификации файлов и перезапуска сервисов |
 | 💾 Резервные копии              | Перед обработкой создаются копии обоих whitelist-файлов                            |

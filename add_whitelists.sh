@@ -22,7 +22,7 @@
 
 set -Eeuo pipefail
 
-VERSION="2.2"
+VERSION="2.3"
 
 POSTFIX_FILE="/etc/postfix/client_whitelist"
 CIDR_FILE="/etc/postfix/client_whitelist_cidr"
@@ -49,8 +49,10 @@ prepare_log() {
   fi
 }
 log_line() {
+  # printf '%(...)T' is a bash builtin — no date(1) fork per log line,
+  # which matters on bulk imports (2 log calls per entry).
   local ts user msg
-  ts="$(date '+%F %T')"
+  printf -v ts '%(%F %T)T' -1
   user="${SUDO_USER:-${USER:-root}}"
   msg="$*"
   if [ "$LOG_ENABLED" -eq 1 ]; then
@@ -232,7 +234,7 @@ remove_from_file() {
 
 do_remove() {
   local raw="$1" entry rm_pf=0 rm_cidr=0 rm_pg=0
-  entry="$(trim_lower "$raw")"
+  trim_lower "$raw"; entry="$TRIMMED"
   [ -n "$entry" ] || die "--remove requires a non-empty ENTRY"
   msg "🔧 add_whitelists.sh v${VERSION} — removing: $entry"
 
@@ -262,7 +264,7 @@ do_remove() {
 
 do_verify() {
   local raw="$1" entry hit=0 out
-  entry="$(trim_lower "$raw")"
+  trim_lower "$raw"; entry="$TRIMMED"
   [ -n "$entry" ] || die "--verify requires a non-empty ENTRY"
   command -v postmap >/dev/null 2>&1 || die "postmap not found — is Postfix installed?"
   msg "🔎 ${C_BOLD}Verify:${C_RESET} $entry"
@@ -363,29 +365,43 @@ already_in_file() {
   grep -qE -- "^${esc}([[:space:]]|$)" "$file"
 }
 
+# In-memory caches of existing entries (first token of each line).
+# Loaded once before processing, so bulk imports do O(1) hash lookups
+# instead of forking a grep per entry per file.
+declare -A KNOWN_PF=() KNOWN_CIDR=() KNOWN_PG=()
+
+load_known() {
+  # load_known <file> <arrayname>
+  local file="$1" key _rest
+  local -n _known="$2"
+  [ -f "$file" ] || return 0
+  while read -r key _rest; do
+    [ -z "$key" ] && continue
+    case "$key" in \#*) continue ;; esac
+    _known["$key"]=1
+  done < "$file"
+}
+
 add_postfix() {
   local v="$1"
-  if already_in_file "$v" "$POSTFIX_FILE"; then
-    return 1
-  fi
+  [ -n "${KNOWN_PF[$v]:-}" ] && return 1
+  KNOWN_PF[$v]=1
   [ "$DRY" -eq 0 ] && printf '%s OK\n' "$v" >> "$POSTFIX_FILE"
   return 0
 }
 
 add_cidr() {
   local v="$1"
-  if already_in_file "$v" "$CIDR_FILE"; then
-    return 1
-  fi
+  [ -n "${KNOWN_CIDR[$v]:-}" ] && return 1
+  KNOWN_CIDR[$v]=1
   [ "$DRY" -eq 0 ] && printf '%s OK\n' "$v" >> "$CIDR_FILE"
   return 0
 }
 
 add_postgrey() {
   local v="$1"
-  if already_in_file "$v" "$POSTGREY_FILE"; then
-    return 1
-  fi
+  [ -n "${KNOWN_PG[$v]:-}" ] && return 1
+  KNOWN_PG[$v]=1
   [ "$DRY" -eq 0 ] && printf '%s\n' "$v" >> "$POSTGREY_FILE"
   return 0
 }
@@ -397,15 +413,22 @@ ADDED_CIDR=0
 ADDED_PG=0
 ERRORS=0
 
+TRIMMED=""
 trim_lower() {
-  # sed-based trim: xargs chokes on quotes/apostrophes in input; also strip CR
-  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
-    | sed 's/\r$//;s/^[[:space:]]*//;s/[[:space:]]*$//'
+  # Pure-bash lowercase + CR strip + whitespace trim. Sets $TRIMMED instead
+  # of printing: a $(...) substitution would fork a subshell per input line,
+  # which dominates runtime on bulk imports.
+  local s="${1,,}"
+  s="${s//$'\r'/}"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  TRIMMED="$s"
 }
 
 process_entry() {
   local raw="$1" entry
-  entry="$(trim_lower "$raw")"
+  trim_lower "$raw"
+  entry="$TRIMMED"
   [ -z "$entry" ] && return 0
   [[ "$entry" =~ ^# ]] && return 0
 
@@ -517,6 +540,11 @@ rotate_backups "$POSTFIX_FILE"
 rotate_backups "$CIDR_FILE"
 rotate_backups "$POSTGREY_FILE"
 
+# One pass over the existing files, then all duplicate checks are in-memory.
+load_known "$POSTFIX_FILE"  KNOWN_PF
+load_known "$CIDR_FILE"     KNOWN_CIDR
+load_known "$POSTGREY_FILE" KNOWN_PG
+
 if [ -n "$LIST_FILE" ]; then
   [ -f "$LIST_FILE" ] || die "File not found: $LIST_FILE"
   while IFS= read -r line || [ -n "$line" ]; do
@@ -539,8 +567,11 @@ if [ "$DRY" -eq 0 ]; then
     log_line "RELOAD postfix (hash=$ADDED_PF cidr=$ADDED_CIDR)"
   fi
   if [ "$ADDED_PG" -gt 0 ]; then
-    msg "🔄 Restarting Postgrey"; systemctl restart postgrey || true
-    log_line "RESTART postgrey (added=$ADDED_PG)"
+    # reload (SIGHUP) makes postgrey re-read its whitelists without dropping
+    # state; fall back to restart where the unit has no reload action
+    msg "🔄 Reloading Postgrey"
+    systemctl reload postgrey 2>/dev/null || systemctl restart postgrey || true
+    log_line "RELOAD postgrey (added=$ADDED_PG)"
   fi
   msg "✅ ${C_GREEN}Done.${C_RESET} Added: Postfix=${C_CYAN}${ADDED_PF}${C_RESET}, Cidr=${C_CYAN}${ADDED_CIDR}${C_RESET}, Postgrey=${C_CYAN}${ADDED_PG}${C_RESET}, Errors=${C_CYAN}${ERRORS}${C_RESET}"
 

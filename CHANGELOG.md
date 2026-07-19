@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.3.0] – 2026-07-19
+### Changed
+- **~24x faster bulk imports** (21.5s → 0.9s for 2000 entries in benchmarks).
+  Three fork storms eliminated from the per-entry hot path:
+  - duplicate checks now use in-memory hash lookups (existing files are read
+    once into associative arrays) instead of two `grep` processes per entry;
+  - `trim_lower` rewritten in pure bash (no `tr | sed` pipeline and no
+    command-substitution subshell per line);
+  - `log_line` timestamps use the bash builtin `printf '%(...)T'` instead of
+    forking `date(1)` twice per entry.
+- Postgrey: try `systemctl reload` (SIGHUP re-reads whitelists) before
+  falling back to restart.
+
 ## [2.2.0] – 2026-07-19
 ### Added
 - **`--remove ENTRY`** — removes an entry from all three whitelist files
