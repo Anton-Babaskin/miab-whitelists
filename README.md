@@ -6,6 +6,17 @@
 
 # 📬 MIAB Whitelists
 
+<!-- quick-start -->
+
+## âš¡ Quick Start
+
+```bash
+git clone https://github.com/Anton-Babaskin/miab-whitelists.git && cd miab-whitelists && chmod +x add_whitelists.sh && sudo ./add_whitelists.sh --setup && sudo ./add_whitelists.sh example.com
+```
+
+> [!IMPORTANT]
+> This changes Postfix/Postgrey whitelist configuration. Use -n for a dry run.
+
 ### A toolkit for managing Postfix & Postgrey whitelists on Mail-in-a-Box
 
 <p>
