@@ -27,6 +27,7 @@ jobs:
           bash -n sync_whitelists.sh
           bash -n tests/run_tests.sh
           bash -n tests/run_sync_tests.sh
+          bash -n tests/run_refresh_tests.sh
 
       - name: ShellCheck
         run: |
@@ -35,6 +36,7 @@ jobs:
           shellcheck sync_whitelists.sh
           shellcheck tests/run_tests.sh
           shellcheck tests/run_sync_tests.sh
+          shellcheck tests/run_refresh_tests.sh
 
   test:
     name: Functional tests (sandboxed)
@@ -49,3 +51,6 @@ jobs:
 
       - name: Run sync test suite
         run: sudo env "PATH=$PATH" bash tests/run_sync_tests.sh
+
+      - name: Run refresh test suite
+        run: bash tests/run_refresh_tests.sh

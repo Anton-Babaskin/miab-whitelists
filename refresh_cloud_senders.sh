@@ -17,7 +17,10 @@
 # НЕ используем set -e — ломается на grep с exit code 1.
 set -uo pipefail
 
-VERSION="1.2"
+VERSION="1.3"
+
+# Exit codes: 0 ok, 1 error (включая «ни одного диапазона не собрано»),
+#             3 partial (часть DNS-запросов упала; --apply в этом случае отказывается)
 
 # ============================================================================
 # CONFIG — провайдеры, чьи SPF разворачиваем. Добавляй своих по аналогии.
@@ -123,10 +126,7 @@ fi
 declare -A SEEN_DOMAINS=()
 RESULT_IP4=()
 RESULT_IP6=()
-
-get_txt() {
-  dig +short txt "$1" 2>/dev/null | tr -d '"' | tr '\n' ' '
-}
+DNS_FAILS=0
 
 expand_spf() {
   local domain="$1" depth="$2"
@@ -140,9 +140,17 @@ expand_spf() {
   fi
   SEEN_DOMAINS[$domain]=1
 
-  local txt
-  txt="$(get_txt "$domain")"
-  if [ -z "$txt" ]; then
+  # v1.3: различаем сетевой сбой DNS (dig rc != 0: timeout/SERVFAIL/нет связи)
+  # и пустой ответ (NXDOMAIN / нет TXT). Сбой считается в DNS_FAILS: при
+  # частичных данных скрипт вернёт 3, а --apply откажется применять.
+  local raw txt
+  if ! raw="$(dig +short txt "$domain" 2>/dev/null)"; then
+    DNS_FAILS=$((DNS_FAILS+1))
+    msg "   ${C_R}✗ DNS-сбой на $domain (timeout/SERVFAIL)${C_RST}" >&2
+    return 0
+  fi
+  txt="$(printf '%s' "$raw" | tr -d '"' | tr '\n' ' ')"
+  if [ -z "${txt// /}" ]; then
     msg "   ${C_Y}⚠ нет TXT/SPF у $domain${C_RST}" >&2
     return 0
   fi
@@ -179,17 +187,31 @@ for p in "${PROVIDERS[@]}"; do
   msg "   ${C_G}+$(( ${#RESULT_IP4[@]} - b4 )) ip4, +$(( ${#RESULT_IP6[@]} - b6 )) ip6${C_RST}"
 done
 
-mapfile -t UNIQ_IP4 < <(printf '%s\n' "${RESULT_IP4[@]}" | sort -u -V 2>/dev/null || printf '%s\n' "${RESULT_IP4[@]}" | sort -u)
-mapfile -t UNIQ_IP6 < <(printf '%s\n' "${RESULT_IP6[@]}" | sort -u)
+# v1.3: пустой массив у printf даёт пустую строку -> mapfile получал 1 фиктивный
+# элемент и счётчики показывали ip4=1 при полном DNS-сбое. Теперь guard.
+UNIQ_IP4=(); UNIQ_IP6=()
+if [ "${#RESULT_IP4[@]}" -gt 0 ]; then
+  mapfile -t UNIQ_IP4 < <(printf '%s\n' "${RESULT_IP4[@]}" | sort -u -V 2>/dev/null || printf '%s\n' "${RESULT_IP4[@]}" | sort -u)
+fi
+if [ "${#RESULT_IP6[@]}" -gt 0 ]; then
+  mapfile -t UNIQ_IP6 < <(printf '%s\n' "${RESULT_IP6[@]}" | sort -u)
+fi
+
+# v1.3: не перезаписываем выходной файл, если не собрано ни одного диапазона
+# (массовый DNS-сбой не должен уничтожать прошлый результат).
+if [ "$(( ${#UNIQ_IP4[@]} + ${#UNIQ_IP6[@]} ))" -eq 0 ]; then
+  die "Не собрано ни одного диапазона (DNS-сбоев: $DNS_FAILS). Файл $OUTPUT_FILE не перезаписан."
+fi
 
 NEW_IP4=(); NEW_IP6=()
 if [ -n "$DIFF_FILE" ]; then
   declare -A KNOWN=()
-  while IFS= read -r line; do
-    line="${line%%#*}"
-    line="$(printf '%s' "$line" | xargs 2>/dev/null)"
-    [ -z "$line" ] && continue
-    KNOWN["$line"]=1
+  # v1.3: сравниваем по ПЕРВОМУ полю строки — cidr-карта Postfix хранит
+  # "192.0.2.0/24 OK", раньше diff считал такие диапазоны новыми каждый раз.
+  while read -r key _rest; do
+    [ -z "$key" ] && continue
+    case "$key" in \#*) continue ;; esac
+    KNOWN["$key"]=1
   done < "$DIFF_FILE"
 
   for ip in "${UNIQ_IP4[@]}"; do [ -z "${KNOWN[$ip]:-}" ] && NEW_IP4+=( "$ip" ); done
@@ -226,6 +248,15 @@ fi
 } > "$OUTPUT_FILE"
 
 msg ""
+# v1.3: при частичных DNS-данных --apply отказывается — иначе после diff
+# устаревший «частичный» список выглядел бы как куча новых диапазонов.
+if [ "$DNS_FAILS" -gt 0 ]; then
+  msg "${C_Y}⚠ Частичный результат: DNS-сбоев ${DNS_FAILS}. Проверь сеть/резолвер и перезапусти.${C_RST}"
+  if [ "$APPLY" -eq 1 ]; then
+    die "--apply отменён: применять частичные данные небезопасно (exit 3 без --apply)."
+  fi
+fi
+
 if [ -n "$DIFF_FILE" ]; then
   total_new=$(( ${#NEW_IP4[@]} + ${#NEW_IP6[@]} ))
   if [ "$total_new" -eq 0 ]; then
@@ -252,3 +283,6 @@ else
     msg "   Применить:  ${C_Y}sudo add_whitelists.sh -f $OUTPUT_FILE${C_RST}"
   fi
 fi
+
+[ "$DNS_FAILS" -gt 0 ] && exit 3
+exit 0

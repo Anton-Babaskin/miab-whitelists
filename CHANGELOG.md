@@ -6,6 +6,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.4.1] – 2026-07-20
+`refresh_cloud_senders.sh` v1.3 — closes the remaining review findings.
+### Fixed
+- **Diff mode compares the first field only.** `-d /etc/postfix/client_whitelist_cidr`
+  used to compare against whole lines (`CIDR OK`), so every existing range was
+  reported as new on every run.
+- **Honest DNS failure handling.** Network-level failures (dig timeout/SERVFAIL)
+  are now distinguished from empty answers (no TXT/NXDOMAIN) and counted:
+  partial results exit 3 with a warning, `--apply` refuses to apply partial
+  data, and if nothing was collected at all the script exits 1 **without
+  overwriting the previous output file**.
+- **Phantom counters on total DNS failure.** An empty result array used to
+  produce a single empty element, reporting `ip4=1, ip6=1` on a fully failed
+  run.
+### Added
+- `tests/run_refresh_tests.sh` — 16 sandboxed checks with a fixture `dig` stub:
+  SPF recursion, include cycles, dedup, first-field diff, partial/total DNS
+  failure, `--apply` refusal. Wired into CI.
+
 ## [2.4.0] – 2026-07-20
 Safety release based on an external security review. Project logic is
 unchanged: two-layer deliverability (Postfix maps first, Postgrey `.local`
