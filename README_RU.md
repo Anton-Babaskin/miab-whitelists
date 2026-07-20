@@ -55,6 +55,7 @@
 | ---------- | ---------- | :--------: |
 | [`add_whitelists.sh`](#-add_whitelistssh) | Добавляет домены, IPv4-адреса и IPv4/IPv6 CIDR-подсети в whitelist Postfix и Postgrey — по одной записи или массово из файла. Идемпотентно, с бэкапами, dry-run и подключением к Postfix одной командой (`--setup`). | Да |
 | [`refresh_cloud_senders.sh`](#%EF%B8%8F-refresh_cloud_senderssh) | Автоматически генерирует актуальные диапазоны облачных провайдеров, рекурсивно разворачивая их SPF-записи в ip4/ip6 CIDR. Работает в паре с `add_whitelists.sh`. | Нет |
+| [`sync_whitelists.sh`](#-sync_whitelistssh) | Автосинхронизация парка: подтягивает whitelist из git-репозитория по systemd-таймеру, применяет его и сам чинит подключение к Postfix после обновлений MIAB. | Да |
 
 Типовой конвейер:
 
@@ -527,6 +528,54 @@ PROVIDERS=(
 
 ---
 
+# 🔁 `sync_whitelists.sh`
+
+Автосинхронизация парка серверов: whitelist правится в одном (приватном) git-репозитории — каждый сервер сходится к нему сам, по ежедневному systemd-таймеру.
+
+Каждый цикл синхронизации:
+
+1. `git pull --ff-only` в репозитории с whitelist'ом;
+2. применяет список через `add_whitelists.sh -f` (идемпотентно и быстро, поэтому применяется всегда — пропущенный запуск ничего не стоит);
+3. проверяет подключение к Postfix через `--check` и, если обновление Mail-in-a-Box отцепило карты, **автоматически перезапускает `--setup`**;
+4. о сбоях сообщает в syslog и (опционально) на почту.
+
+### Настройка (один раз на сервер)
+
+```bash
+# 1. Клонируем приватный репозиторий с whitelist'ом в стабильное место
+sudo git clone git@github.example.com:you/corporate-whitelist.git /opt/corporate-whitelist
+
+# 2. Ставим таймер и образец конфига
+sudo ./sync_whitelists.sh --install
+
+# 3. Указываем путь к репозиторию
+sudo nano /etc/miab-whitelists/sync.conf   # REPO_DIR="/opt/corporate-whitelist"
+
+# 4. Проверяем цикл вручную
+sudo sync_whitelists.sh
+```
+
+`--install` создаёт `/etc/miab-whitelists/sync.conf` (права 600), копирует скрипт в `/usr/local/bin` и включает `miab-whitelist-sync.timer` — ежедневно в 06:30 со случайной задержкой ±30 минут (чтобы парк не бил в git-сервер одновременно) и `Persistent=true` (выключенный сервер навёрстывает после загрузки).
+
+### Справочник конфига
+
+| Переменная | По умолчанию | Значение |
+| ---------- | ------------ | -------- |
+| `REPO_DIR` | — (обязательна) | Git-репозиторий с whitelist'ом |
+| `WHITELIST_FILE` | `whitelist.txt` | Файл записей внутри репозитория |
+| `ADD_SCRIPT` | автопоиск | Путь к `add_whitelists.sh` |
+| `AUTO_SETUP` | `1` | Автоматически перезапускать `--setup` при отцепленных картах |
+| `ALERT_EMAIL` | пусто | Почта для алертов о сбоях (syslog используется всегда) |
+
+### Мониторинг
+
+```bash
+systemctl list-timers miab-whitelist-sync.timer   # следующий/последний запуск
+journalctl -u miab-whitelist-sync.service -n 50   # логи синхронизации
+```
+
+---
+
 ## 📦 Структура репозитория
 
 ```text
@@ -541,8 +590,12 @@ miab-whitelists/
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── examples/
 │   └── whitelist.example.txt
+├── tests/
+│   ├── run_tests.sh
+│   └── run_sync_tests.sh
 ├── add_whitelists.sh
 ├── refresh_cloud_senders.sh
+├── sync_whitelists.sh
 ├── CHANGELOG.md
 ├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md

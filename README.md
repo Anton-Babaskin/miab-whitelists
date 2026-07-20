@@ -55,6 +55,7 @@
 | ---- | ------------ | :--------: |
 | [`add_whitelists.sh`](#-add_whitelistssh) | Add domains, IPv4 addresses and IPv4/IPv6 CIDR ranges to the Postfix and Postgrey whitelists — one entry at a time or in bulk from a file. Idempotent, with backups, dry-run and one-command Postfix integration (`--setup`). | Yes |
 | [`refresh_cloud_senders.sh`](#%EF%B8%8F-refresh_cloud_senderssh) | Auto-generate up-to-date cloud provider IP ranges by recursively expanding their SPF records into ip4/ip6 CIDR. Pairs with `add_whitelists.sh`. | No |
+| [`sync_whitelists.sh`](#-sync_whitelistssh) | Fleet auto-sync: pull your whitelist from a git repo on a daily systemd timer, apply it, and self-heal the Postfix integration after MIAB updates. | Yes |
 
 Typical pipeline:
 
@@ -528,6 +529,54 @@ Review the diff and apply it deliberately with `add_whitelists.sh` — avoid bli
 
 ---
 
+# 🔁 `sync_whitelists.sh`
+
+Fleet auto-sync: edit the whitelist in one (private) git repository — every server converges on its own, on a daily systemd timer.
+
+Each sync cycle:
+
+1. `git pull --ff-only` in the whitelist repository;
+2. applies the list via `add_whitelists.sh -f` (idempotent and fast, so it always applies — a missed run costs nothing);
+3. verifies the Postfix integration with `--check` and, if a Mail-in-a-Box update unwired the maps, **automatically re-runs `--setup`**;
+4. reports failures to syslog and, optionally, by e-mail.
+
+### Setup (once per server)
+
+```bash
+# 1. Clone your private whitelist repo somewhere stable
+sudo git clone git@github.example.com:you/corporate-whitelist.git /opt/corporate-whitelist
+
+# 2. Install the timer and sample config
+sudo ./sync_whitelists.sh --install
+
+# 3. Point the config at the repo
+sudo nano /etc/miab-whitelists/sync.conf   # set REPO_DIR="/opt/corporate-whitelist"
+
+# 4. Test a cycle manually
+sudo sync_whitelists.sh
+```
+
+`--install` writes `/etc/miab-whitelists/sync.conf` (mode 600), copies the script to `/usr/local/bin`, and enables `miab-whitelist-sync.timer` — daily at 06:30 with a ±30 min randomized delay (so a fleet doesn't hammer the git server simultaneously) and `Persistent=true` (a server that was down catches up on boot).
+
+### Config reference
+
+| Variable | Default | Meaning |
+| -------- | ------- | ------- |
+| `REPO_DIR` | — (required) | Git repository containing the whitelist |
+| `WHITELIST_FILE` | `whitelist.txt` | Entries file inside the repo |
+| `ADD_SCRIPT` | auto-detect | Path to `add_whitelists.sh` |
+| `AUTO_SETUP` | `1` | Re-run `--setup` automatically when maps get unwired |
+| `ALERT_EMAIL` | empty | E-mail for failure alerts (syslog is always used) |
+
+### Monitoring
+
+```bash
+systemctl list-timers miab-whitelist-sync.timer   # next/last run
+journalctl -u miab-whitelist-sync.service -n 50   # sync logs
+```
+
+---
+
 ## 📦 Repository structure
 
 ```text
@@ -542,8 +591,12 @@ miab-whitelists/
 │   └── PULL_REQUEST_TEMPLATE.md
 ├── examples/
 │   └── whitelist.example.txt
+├── tests/
+│   ├── run_tests.sh
+│   └── run_sync_tests.sh
 ├── add_whitelists.sh
 ├── refresh_cloud_senders.sh
+├── sync_whitelists.sh
 ├── CHANGELOG.md
 ├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md

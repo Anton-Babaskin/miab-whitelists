@@ -24,13 +24,17 @@ jobs:
         run: |
           bash -n add_whitelists.sh
           bash -n refresh_cloud_senders.sh
+          bash -n sync_whitelists.sh
           bash -n tests/run_tests.sh
+          bash -n tests/run_sync_tests.sh
 
       - name: ShellCheck
         run: |
           shellcheck add_whitelists.sh
           shellcheck refresh_cloud_senders.sh
+          shellcheck sync_whitelists.sh
           shellcheck tests/run_tests.sh
+          shellcheck tests/run_sync_tests.sh
 
   test:
     name: Functional tests (sandboxed)
@@ -42,3 +46,6 @@ jobs:
 
       - name: Run test suite
         run: sudo env "PATH=$PATH" bash tests/run_tests.sh
+
+      - name: Run sync test suite
+        run: sudo env "PATH=$PATH" bash tests/run_sync_tests.sh

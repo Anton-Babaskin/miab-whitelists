@@ -6,6 +6,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.3.1] – 2026-07-19
+### Added
+- **`sync_whitelists.sh` v1.0 — fleet auto-sync.** Keeps a server's whitelists
+  converged with a git repository: `git pull --ff-only` → apply via
+  `add_whitelists.sh -f` → verify wiring via `--check` and automatically
+  re-run `--setup` if a MIAB update unwired the maps. Failures go to syslog
+  and (optionally) e-mail via `ALERT_EMAIL`.
+  - `--install` writes a sample config (`/etc/miab-whitelists/sync.conf`),
+    installs the script to `/usr/local/bin` and enables a daily systemd timer
+    (06:30 ± 30 min randomized, `Persistent=true` catches up after downtime).
+  - Sandboxed test suite `tests/run_sync_tests.sh` (10 checks), wired into CI.
+
 ## [2.3.0] – 2026-07-19
 ### Changed
 - **~24x faster bulk imports** (21.5s → 0.9s for 2000 entries in benchmarks).
