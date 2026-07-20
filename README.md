@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Version" src="https://img.shields.io/badge/version-2.3-1f6feb?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.4-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="MIT License" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -237,20 +237,30 @@ Usage:
   add_whitelists.sh --verify ENTRY
 
 Options:
-  -f FILE      Read entries from a file
-  -n           Dry-run: show the result without applying changes
-  -h           Show help
-  --help       Show help
-  --setup      Wire whitelist maps into Postfix restrictions (idempotent)
-  --check      Show Postfix integration status (exit 0 = wired, 2 = not wired)
+  -f FILE         Read entries from a file
+  -n              Dry-run: show the result without applying changes
+  -h / --help     Show help
+  --best-effort   Apply valid entries even if the batch contains invalid ones
+                  (default: validate the whole batch first, abort on any error)
+  --setup      Wire whitelist maps into Postfix restrictions (idempotent,
+               self-repairing: fixes wrong order and duplicates; rolls back
+               automatically if postfix check/reload fails)
+  --check      Show Postfix integration status, including map ORDER relative
+               to the greylisting policy service (exit 0 = OK, 2 = not OK)
   --list       Show all whitelist files, counters and integration status
   --remove     Remove ENTRY from all whitelist files (exit 1 if not found)
   --verify     Check whether ENTRY is actually whitelisted (exit 0 = yes)
   --version    Show the script version
+
+Exit codes:
+  0 success, 1 usage/runtime error, 2 validation failed
 ```
 
 > [!IMPORTANT]
 > Dry-run mode still requires root privileges because the script validates access to the system environment before processing.
+
+> [!NOTE]
+> Entries match the **connecting SMTP client** (its rDNS hostname or IP address), not the `From:` header — that is how Postfix `check_client_access` and Postgrey client whitelists work. A `gmail.com` entry allows hosts whose rDNS ends in `gmail.com`, not "mail from gmail addresses".
 
 ### 📄 Input file format
 
@@ -384,6 +394,8 @@ The log records script start/completion, the invoking user, added entries, dupli
 
 > [!WARNING]
 > Whitelisting may allow selected senders to bypass greylisting or other mail restrictions configured on the server.
+
+Whitelisting a cloud provider's SPF ranges (Microsoft 365, Google, SES…) trusts the provider's **shared pool** — every tenant of that provider, not just your partner. On this toolkit that means those clients skip greylisting only (RBL checks and recipient validation still apply), so the risk is moderate — but keep it in mind.
 
 Only add entries that you control or have independently verified. Before applying a large list:
 

@@ -6,6 +6,40 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.4.0] – 2026-07-20
+Safety release based on an external security review. Project logic is
+unchanged: two-layer deliverability (Postfix maps first, Postgrey `.local`
+as the redundant layer that survives MIAB updates).
+
+### Security
+- **`--remove` no longer feeds user input into regexes.** The entry is
+  validated as a domain/IP/CIDR first (regex-looking garbage is refused),
+  and removal is an exact first-field comparison in awk with an atomic
+  tmp+mv write. Previously a crafted argument like `.*` could wipe all
+  whitelist files. `already_in_file` moved to the same awk exact match.
+### Added
+- **Real input validation:** IPv4 octets ≤255 and no leading zeros, IPv4
+  prefix ≤32, structural IPv6 checks (single `::`, ≤4 hex digits per group,
+  group count) and IPv6 prefix ≤128. `999.999.999.999`, `10.0.0.0/99`,
+  `2001:db8::/129` are now rejected.
+- **Transactional batches:** the whole input is validated first; any invalid
+  entry aborts the run with exit 2 and nothing applied. `--best-effort`
+  restores the old permissive behavior explicitly. Stable exit codes
+  (0 ok / 1 runtime / 2 validation) for Ansible and monitoring.
+- **Order-aware `--check`:** verifies both tokens are present, positioned
+  BEFORE the first `check_policy_service` (maps placed after postgrey never
+  fire) and not duplicated; misordered/duplicated wiring is exit 2 with an
+  explanation.
+- **Self-repairing `--setup`:** rebuilds the restrictions chain — strips all
+  existing occurrences of our tokens (fixes duplicates and wrong position)
+  and re-inserts them at the correct point.
+- **Rollback in `--setup`:** the previous `smtpd_recipient_restrictions`
+  value is restored automatically if `postfix check` or `postfix reload`
+  fails — a broken main.cf is never left behind.
+### Changed
+- Docs clarify that entries match the CONNECTING CLIENT (rDNS hostname/IP),
+  not the From: header (`check_client_access` semantics).
+
 ## [2.3.1] – 2026-07-19
 ### Added
 - **`sync_whitelists.sh` v1.0 — fleet auto-sync.** Keeps a server's whitelists

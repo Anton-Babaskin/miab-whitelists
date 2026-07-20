@@ -71,6 +71,9 @@ EOF
 cat > "$SBX/bin/postfix" <<EOF
 #!/usr/bin/env bash
 echo "STUB postfix \$1" >> "$SBX/calls.log"
+# controllable failure for rollback tests
+if [ "\$1" = "check" ] && [ -f "$SBX/fail_check" ]; then exit 1; fi
+exit 0
 EOF
 cat > "$SBX/bin/systemctl" <<EOF
 #!/usr/bin/env bash
@@ -93,8 +96,8 @@ touch "$PF" "$PG"
 t "dry-run single entry" 0 "$AW" -n Example.COM
 assert_not_grep "dry-run wrote nothing" "example" "$PF"
 
-echo "# mixed batch: routing, duplicates, invalid, comments, CRLF"
-printf 'example.com\r\n1.2.3.4\n198.51.100.0/24\n2001:DB8::/32\n2001:db8::15\nexample.com\nnot_valid_@@\n# comment\n   \n' > "$SBX/list.txt"
+echo "# mixed batch: routing, duplicates, comments, CRLF (all valid)"
+printf 'example.com\r\n1.2.3.4\n198.51.100.0/24\n2001:DB8::/32\n2001:db8::15\nexample.com\n# comment\n   \n' > "$SBX/list.txt"
 t "batch import" 0 "$AW" -f "$SBX/list.txt"
 assert_grep     "domain in hash map"       '^example\.com OK$'        "$PF"
 assert_grep     "ipv4 in hash map"         '^1\.2\.3\.4 OK$'          "$PF"
@@ -104,9 +107,21 @@ assert_grep     "bare ipv6 in cidr map"    '^2001:db8::15 OK$'        "$CF"
 assert_grep     "domain in postgrey"       '^example\.com$'           "$PG"
 assert_grep     "cidr6 in postgrey"        '^2001:db8::/32$'          "$PG"
 assert_not_grep "cidr NOT in hash map"     '198\.51\.100'             "$PF"
-assert_grep     "unwired warning shown"    'not wired'                "$SBX/last.out"
+assert_grep     "unwired warning shown"    'not (correctly )?wired'   "$SBX/last.out"
 assert_grep     "postfix reloaded"         'STUB postfix reload'      "$SBX/calls.log"
 assert_grep     "postgrey reloaded/restarted" 'systemctl (reload|restart) postgrey' "$SBX/calls.log"
+
+echo "# v2.4: transactional batches and real validation"
+printf 'valid-host.example.com\nnot_valid_@@\n999.999.999.999\n10.0.0.0/99\n2001:db8::/129\n01.2.3.4\n' > "$SBX/bad.txt"
+t "invalid batch aborts with exit 2" 2 "$AW" -f "$SBX/bad.txt"
+assert_not_grep "nothing applied on abort" 'valid-host' "$PF"
+t "--best-effort applies valid, still exit 2" 2 "$AW" --best-effort -f "$SBX/bad.txt"
+assert_grep     "valid entry applied in best-effort" '^valid-host\.example\.com OK$' "$PF"
+assert_not_grep "999.999.999.999 rejected"  '999\.999' "$PF"
+assert_not_grep "/99 prefix rejected"       '10\.0\.0\.0/99' "$CF"
+assert_not_grep "/129 v6 prefix rejected"   '/129' "$CF"
+assert_not_grep "leading-zero octet rejected" '01\.2\.3\.4' "$PF"
+t "single invalid entry exits 2" 2 "$AW" 999.999.999.999
 
 echo "# duplicates are a no-op (no reload/restart)"
 : > "$SBX/calls.log"
@@ -146,6 +161,40 @@ assert_not_grep "removed from postgrey" '^example\.com$'    "$PG"
 assert_grep     "other entries survive" '^1\.2\.3\.4 OK$'   "$PF"
 t "--remove missing entry exits 1" 1 "$AW" --remove nonexistent.example.net
 t "--remove without arg fails"     1 "$AW" --remove
+
+echo "# v2.4: --remove refuses regex-looking input, files untouched"
+before_pf="$(cat "$PF")"
+t "--remove '.*' is refused" 1 "$AW" --remove '.*'
+if [ "$(cat "$PF")" = "$before_pf" ]; then
+  PASS=$((PASS+1)); echo "ok   - files untouched after refused remove"
+else
+  FAIL=$((FAIL+1)); echo "FAIL - '.*' modified the whitelist file"
+fi
+
+echo "# v2.4: order-aware --check and --setup order repair"
+echo "permit_mynetworks, check_policy_service inet:127.0.0.1:10023, check_client_access hash:$PF, check_client_access cidr:$CF" > "$SBX/rr.txt"
+t "--check flags misordered maps (exit 2)" 2 "$AW" --check
+assert_grep "misorder explained" 'ordering WRONG' "$SBX/last.out"
+t "--setup repairs the order" 0 "$AW" --setup
+assert_grep "maps re-inserted before policy service" 'hash:[^,]*, check_client_access cidr:[^,]*, check_policy_service' "$SBX/rr.txt"
+if [ "$(grep -o 'hash:' "$SBX/rr.txt" | wc -l)" -eq 1 ]; then
+  PASS=$((PASS+1)); echo "ok   - no duplicate tokens after repair"
+else
+  FAIL=$((FAIL+1)); echo "FAIL - duplicate tokens after repair"
+fi
+t "--check passes after repair" 0 "$AW" --check
+
+echo "# v2.4: --setup rollback when postfix check fails"
+echo "permit_mynetworks, check_policy_service inet:127.0.0.1:10023" > "$SBX/rr.txt"
+rr_before="$(cat "$SBX/rr.txt")"
+touch "$SBX/fail_check"
+t "--setup fails when postfix check fails" 1 "$AW" --setup
+rm -f "$SBX/fail_check"
+if [ "$(cat "$SBX/rr.txt")" = "$rr_before" ]; then
+  PASS=$((PASS+1)); echo "ok   - restrictions rolled back after failed check"
+else
+  FAIL=$((FAIL+1)); echo "FAIL - broken restrictions left behind"
+fi
 
 # --- summary -----------------------------------------------------------------
 echo ""

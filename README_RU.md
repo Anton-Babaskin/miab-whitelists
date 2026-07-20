@@ -16,7 +16,7 @@
   <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
     <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
   </a>
-  <img alt="Версия" src="https://img.shields.io/badge/version-2.3-1f6feb?style=for-the-badge">
+  <img alt="Версия" src="https://img.shields.io/badge/version-2.4-1f6feb?style=for-the-badge">
   <a href="./LICENSE">
     <img alt="Лицензия MIT" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
   </a>
@@ -237,20 +237,30 @@ add_whitelists.sh --version                              # показать ве
   add_whitelists.sh --verify ENTRY
 
 Параметры:
-  -f FILE      Прочитать записи из файла
-  -n           Dry-run: показать результат без применения изменений
-  -h           Показать справку
-  --help       Показать справку
-  --setup      Вписать whitelist-карты в restrictions Postfix (идемпотентно)
-  --check      Показать статус подключения к Postfix (exit 0 = подключено, 2 = нет)
+  -f FILE         Прочитать записи из файла
+  -n              Dry-run: показать результат без применения изменений
+  -h / --help     Показать справку
+  --best-effort   Применить валидные записи, даже если в пакете есть некорректные
+                  (по умолчанию: сначала валидация всего пакета, при ошибке — отмена)
+  --setup      Вписать whitelist-карты в restrictions Postfix (идемпотентно,
+               самовосстанавливается: чинит неправильный порядок и дубли;
+               автоматический откат, если postfix check/reload падает)
+  --check      Статус подключения к Postfix, включая ПОРЯДОК карт относительно
+               policy-сервиса greylisting (exit 0 = OK, 2 = нет)
   --list       Показать все whitelist-файлы, счётчики и статус подключения
   --remove     Удалить ENTRY из всех whitelist-файлов (exit 1, если не найдена)
   --verify     Проверить, действительно ли ENTRY в whitelist (exit 0 = да)
   --version    Показать версию скрипта
+
+Коды выхода:
+  0 успех, 1 ошибка запуска/выполнения, 2 ошибка валидации
 ```
 
 > [!IMPORTANT]
 > Режим dry-run также требует root-прав, поскольку скрипт проверяет доступ к системному окружению до начала обработки.
+
+> [!NOTE]
+> Записи матчатся по **подключающемуся SMTP-клиенту** (его rDNS-имени или IP-адресу), а не по заголовку `From:` — так работают `check_client_access` в Postfix и клиентские whitelist'ы Postgrey. Запись `gmail.com` пропускает хосты, чей rDNS оканчивается на `gmail.com`, а не «письма с gmail-адресов».
 
 ### 📄 Формат входного файла
 
@@ -384,6 +394,8 @@ sudo tail -f /var/log/add_whitelists.log
 
 > [!WARNING]
 > Whitelist может позволить выбранным отправителям обходить greylisting или другие ограничения почтового сервера.
+
+Whitelisting SPF-диапазонов облачного провайдера (Microsoft 365, Google, SES…) означает доверие к **общему пулу** провайдера — всем его клиентам, а не только вашему партнёру. В этом инструменте такие клиенты обходят только greylisting (RBL-проверки и валидация получателей остаются), так что риск умеренный — но помните об этом.
 
 Добавляйте только записи, которые вы контролируете или независимо проверили. Перед применением большого списка:
 
