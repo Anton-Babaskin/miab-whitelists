@@ -8,7 +8,7 @@
 
 <!-- quick-start -->
 
-## âš¡ Quick Start
+## ⚡ Quick Start
 
 ```bash
 git clone https://github.com/Anton-Babaskin/miab-whitelists.git && cd miab-whitelists && chmod +x add_whitelists.sh && sudo ./add_whitelists.sh --setup && sudo ./add_whitelists.sh example.com
@@ -189,30 +189,67 @@ add_whitelists.sh --check    # exit 0 = wired, exit 2 = not wired
 
 ### 🚀 Quick start
 
-#### Option 1: Run from the repository
+#### Step 1. Install
 
 ```bash
 git clone https://github.com/Anton-Babaskin/miab-whitelists.git
 cd miab-whitelists
-
 chmod +x add_whitelists.sh
-sudo ./add_whitelists.sh example.com
 ```
 
-#### Option 2: Install globally
+Or install globally:
 
 ```bash
-git clone https://github.com/Anton-Babaskin/miab-whitelists.git
-cd miab-whitelists
-
 sudo install -m 0755 add_whitelists.sh /usr/local/bin/add_whitelists.sh
 ```
 
-The command can then be used from any directory:
+#### Step 2. Wire maps into Postfix (one-time)
 
 ```bash
-sudo add_whitelists.sh example.com
+sudo ./add_whitelists.sh --setup
 ```
+
+Without this step the whitelist files exist but Postfix **does not read them** — the `check_client_access` tokens are missing from `smtpd_recipient_restrictions`. `--setup` inserts them before `check_policy_service` (postgrey) so trusted clients bypass greylisting. The command is idempotent — re-running it is safe.
+
+> [!NOTE]
+> Postgrey (`whitelist_clients.local`) works without `--setup` — postgrey reads its own file. `--setup` is only needed for the Postfix layer.
+
+#### Step 3. Verify integration
+
+```bash
+./add_whitelists.sh --check
+```
+
+Expected output — three green ✅:
+
+```
+🔎 Postfix integration status:
+   ✅ hash map present:  check_client_access hash:/etc/postfix/client_whitelist
+   ✅ cidr map present:  check_client_access cidr:/etc/postfix/client_whitelist_cidr
+   ✅ ordering OK: maps act before the greylisting policy service
+```
+
+#### Step 4. Add entries
+
+```bash
+# Create a whitelist file (one domain/IP/CIDR per line)
+nano whitelists.txt
+
+# Dry run — preview what would change, nothing is written
+sudo ./add_whitelists.sh -n -f whitelists.txt
+
+# Apply
+sudo ./add_whitelists.sh -f whitelists.txt
+```
+
+Or a single entry without a file:
+
+```bash
+sudo ./add_whitelists.sh example.com
+```
+
+> [!WARNING]
+> After every Mail-in-a-Box update, run `sudo ./add_whitelists.sh --setup` — MIAB regenerates `smtpd_recipient_restrictions` and unwires the maps.
 
 ### 🛠 Usage
 
