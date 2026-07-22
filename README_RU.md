@@ -1,58 +1,32 @@
-<p align="right">
-  <a href="./README.md">🇬🇧 English</a> · 🇷🇺 Русский
-</p>
-
-<div align="center">
+[🇬🇧 English](README.md) · 🇷🇺 Русский
 
 # 📬 MIAB Whitelists
 
 ### Набор инструментов для управления whitelist Postfix и Postgrey на Mail-in-a-Box
 
-<p>
-  Два дополняющих друг друга Bash-инструмента: добавлять доверенных отправителей вручную и держать диапазоны облачных провайдеров в актуальном состоянии прямо из их SPF-записей.
-</p>
+Два дополняющих друг друга Bash-инструмента: добавлять доверенных отправителей вручную и держать диапазоны облачных провайдеров в актуальном состоянии прямо из их SPF-записей.
 
-<p>
-  <a href="https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml">
-    <img alt="ShellCheck" src="https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck">
-  </a>
-  <img alt="Версия" src="https://img.shields.io/badge/version-2.4-1f6feb?style=for-the-badge">
-  <a href="./LICENSE">
-    <img alt="Лицензия MIT" src="https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge">
-  </a>
-  <a href="https://github.com/Anton-Babaskin/miab-whitelists/commits/main">
-    <img alt="Последний коммит" src="https://img.shields.io/github/last-commit/Anton-Babaskin/miab-whitelists?style=for-the-badge">
-  </a>
-</p>
+[![ShellCheck](https://img.shields.io/github/actions/workflow/status/Anton-Babaskin/miab-whitelists/shellcheck.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=ShellCheck)](https://github.com/Anton-Babaskin/miab-whitelists/actions/workflows/shellcheck.yml)
+[![Версия](https://img.shields.io/badge/version-2.4-1f6feb?style=for-the-badge)](https://github.com/Anton-Babaskin/miab-whitelists)
+[![Лицензия MIT](https://img.shields.io/github/license/Anton-Babaskin/miab-whitelists?style=for-the-badge)](LICENSE)
+[![Последний коммит](https://img.shields.io/github/last-commit/Anton-Babaskin/miab-whitelists?style=for-the-badge)](https://github.com/Anton-Babaskin/miab-whitelists/commits/main)
 
-<p>
-  <img alt="Bash" src="https://img.shields.io/badge/Bash-4%2B-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white">
-  <img alt="Mail-in-a-Box" src="https://img.shields.io/badge/Mail--in--a--Box-Compatible-1f6feb?style=for-the-badge">
-  <img alt="Postfix" src="https://img.shields.io/badge/Postfix-Whitelist-336791?style=for-the-badge">
-  <img alt="Postgrey" src="https://img.shields.io/badge/Postgrey-Whitelist-6f42c1?style=for-the-badge">
-  <img alt="Платформа" src="https://img.shields.io/badge/Debian%20%7C%20Ubuntu-Supported-E95420?style=for-the-badge&logo=ubuntu&logoColor=white">
-</p>
+[![Bash](https://img.shields.io/badge/Bash-4%2B-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white)](#)
+[![Mail-in-a-Box](https://img.shields.io/badge/Mail--in--a--Box-Compatible-1f6feb?style=for-the-badge)](#)
+[![Postfix](https://img.shields.io/badge/Postfix-Whitelist-336791?style=for-the-badge)](#)
+[![Postgrey](https://img.shields.io/badge/Postgrey-Whitelist-6f42c1?style=for-the-badge)](#)
+[![Платформа](https://img.shields.io/badge/Debian%20%7C%20Ubuntu-Supported-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](#)
 
-<p>
-  <a href="https://github.com/Anton-Babaskin/miab-whitelists/stargazers">
-    <img alt="Звёзды" src="https://img.shields.io/github/stars/Anton-Babaskin/miab-whitelists?style=flat-square">
-  </a>
-  <a href="https://github.com/Anton-Babaskin/miab-whitelists/issues">
-    <img alt="Задачи" src="https://img.shields.io/github/issues/Anton-Babaskin/miab-whitelists?style=flat-square">
-  </a>
-  <a href="https://github.com/Anton-Babaskin/miab-whitelists/forks">
-    <img alt="Форки" src="https://img.shields.io/github/forks/Anton-Babaskin/miab-whitelists?style=flat-square">
-  </a>
-</p>
-
-</div>
+[![Звёзды](https://img.shields.io/github/stars/Anton-Babaskin/miab-whitelists?style=flat-square)](https://github.com/Anton-Babaskin/miab-whitelists/stargazers)
+[![Задачи](https://img.shields.io/github/issues/Anton-Babaskin/miab-whitelists?style=flat-square)](https://github.com/Anton-Babaskin/miab-whitelists/issues)
+[![Форки](https://img.shields.io/github/forks/Anton-Babaskin/miab-whitelists?style=flat-square)](https://github.com/Anton-Babaskin/miab-whitelists/forks)
 
 ---
 
 ## 🧰 Инструменты
 
 | Инструмент | Что делает | Нужен root |
-| ---------- | ---------- | :--------: |
+|---|---|---|
 | [`add_whitelists.sh`](#-add_whitelistssh) | Добавляет домены, IPv4-адреса и IPv4/IPv6 CIDR-подсети в whitelist Postfix и Postgrey — по одной записи или массово из файла. Идемпотентно, с бэкапами, dry-run и подключением к Postfix одной командой (`--setup`). | Да |
 | [`refresh_cloud_senders.sh`](#%EF%B8%8F-refresh_cloud_senderssh) | Автоматически генерирует актуальные диапазоны облачных провайдеров, рекурсивно разворачивая их SPF-записи в ip4/ip6 CIDR. Работает в паре с `add_whitelists.sh`. | Нет |
 | [`sync_whitelists.sh`](#-sync_whitelistssh) | Автосинхронизация парка: подтягивает whitelist из git-репозитория по systemd-таймеру, применяет его и сам чинит подключение к Postfix после обновлений MIAB. | Да |
@@ -82,14 +56,14 @@ sudo ./add_whitelists.sh example.com
 
 Скрипт автоматически:
 
-* определяет, является ли запись доменом, IPv4-адресом или IPv4/IPv6 CIDR-подсетью;
-* направляет её в соответствующий whitelist;
-* пропускает существующие записи;
-* создаёт резервные копии с таймстампом;
-* удаляет резервные копии старше 30 дней;
-* перестраивает карту Postfix только при необходимости;
-* перезапускает только изменённые сервисы;
-* записывает действия в журнал, если журналирование доступно.
+- определяет, является ли запись доменом, IPv4-адресом или IPv4/IPv6 CIDR-подсетью;
+- направляет её в соответствующий whitelist;
+- пропускает существующие записи;
+- создаёт резервные копии с таймстампом;
+- удаляет резервные копии старше 30 дней;
+- перестраивает карту Postfix только при необходимости;
+- перезапускает только изменённые сервисы;
+- записывает действия в журнал, если журналирование доступно.
 
 Для нескольких записей:
 
@@ -105,34 +79,34 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 
 ### ✨ Возможности
 
-| Возможность                     | Описание                                                                           |
-| ------------------------------- | ---------------------------------------------------------------------------------- |
-| 🎯 Автоматическая маршрутизация | Домены, IPv4-адреса и IPv4/IPv6 CIDR-подсети отправляются в нужный whitelist       |
-| 🔌 Подключение одной командой   | `--setup` вписывает whitelist-карты в `smtpd_recipient_restrictions`; `--check` проверяет подключение |
-| 🗑 Удаление записей             | `--remove ENTRY` удаляет запись из всех whitelist-файлов и перезагружает только затронутые сервисы |
-| 🔍 Живая проверка               | `--verify ENTRY` опрашивает реальные карты Postfix (`postmap -q`, вхождение в CIDR) и Postgrey |
-| 📋 Обзор состояния              | `--list` печатает все whitelist-файлы со счётчиками, датами изменения и статусом подключения |
-| 📄 Одиночный и файловый режимы  | Одна запись или тысячи из файла (dedup в памяти, ~2000 записей/с)                  |
-| ♻️ Идемпотентность              | Существующие записи определяются и пропускаются                                    |
-| 🔍 Режим dry-run                | Показывает запланированные изменения без модификации файлов и перезапуска сервисов |
-| 💾 Резервные копии              | Перед обработкой создаются копии обоих whitelist-файлов                            |
-| 🧹 Ротация копий                | Бэкапы старше 30 дней удаляются автоматически                                      |
-| ⚡ Условное обновление сервисов  | `postmap` и перезапуски выполняются только при реальных изменениях                 |
-| 🧾 Журналирование               | Операции записываются в `/var/log/add_whitelists.log`, когда это возможно          |
-| 🎨 Удобный вывод                | В интерактивном терминале автоматически используется цветной вывод                 |
-| 🛡️ Проверка root               | Скрипт не изменяет системные файлы без административных прав                       |
+| Возможность | Описание |
+|---|---|
+| 🎯 Автоматическая маршрутизация | Домены, IPv4-адреса и IPv4/IPv6 CIDR-подсети отправляются в нужный whitelist |
+| 🔌 Подключение одной командой | `--setup` вписывает whitelist-карты в `smtpd_recipient_restrictions`; `--check` проверяет подключение |
+| 🗑 Удаление записей | `--remove ENTRY` удаляет запись из всех whitelist-файлов и перезагружает только затронутые сервисы |
+| 🔍 Живая проверка | `--verify ENTRY` опрашивает реальные карты Postfix (`postmap -q`, вхождение в CIDR) и Postgrey |
+| 📋 Обзор состояния | `--list` печатает все whitelist-файлы со счётчиками, датами изменения и статусом подключения |
+| 📄 Одиночный и файловый режимы | Одна запись или тысячи из файла (dedup в памяти, ~2000 записей/с) |
+| ♻️ Идемпотентность | Существующие записи определяются и пропускаются |
+| 🔍 Режим dry-run | Показывает запланированные изменения без модификации файлов и перезапуска сервисов |
+| 💾 Резервные копии | Перед обработкой создаются копии обоих whitelist-файлов |
+| 🧹 Ротация копий | Бэкапы старше 30 дней удаляются автоматически |
+| ⚡ Условное обновление сервисов | `postmap` и перезапуски выполняются только при реальных изменениях |
+| 🧾 Журналирование | Операции записываются в `/var/log/add_whitelists.log`, когда это возможно |
+| 🎨 Удобный вывод | В интерактивном терминале автоматически используется цветной вывод |
+| 🛡️ Проверка root | Скрипт не изменяет системные файлы без административных прав |
 
 ### 🧭 Маршрутизация записей
 
 Два whitelist-файла выполняют разные задачи, поэтому записи маршрутизируются автоматически.
 
-| Тип записи         | Пример            |            Postfix            |       Postgrey      |
-| ------------------ | ----------------- | :---------------------------: | :-----------------: |
-| Домен или hostname | `example.com`     | ✅ hash: `example.com OK`      |   ✅ `example.com`   |
-| IPv4-адрес         | `203.0.113.10`    | ✅ hash: `203.0.113.10 OK`     |   ✅ `203.0.113.10`  |
-| IPv4 CIDR-подсеть  | `198.51.100.0/24` | ✅ cidr: `198.51.100.0/24 OK`  | ✅ `198.51.100.0/24` |
-| IPv6 CIDR-подсеть  | `2001:db8::/32`   | ✅ cidr: `2001:db8::/32 OK`    |  ✅ `2001:db8::/32`  |
-| IPv6-адрес         | `2001:db8::15`    | ✅ cidr: `2001:db8::15 OK`     |  ✅ `2001:db8::15`   |
+| Тип записи | Пример | Postfix | Postgrey |
+|---|---|---|---|
+| Домен или hostname | `example.com` | ✅ hash: `example.com OK` | ✅ `example.com` |
+| IPv4-адрес | `203.0.113.10` | ✅ hash: `203.0.113.10 OK` | ✅ `203.0.113.10` |
+| IPv4 CIDR-подсеть | `198.51.100.0/24` | ✅ cidr: `198.51.100.0/24 OK` | ✅ `198.51.100.0/24` |
+| IPv6 CIDR-подсеть | `2001:db8::/32` | ✅ cidr: `2001:db8::/32 OK` | ✅ `2001:db8::/32` |
+| IPv6-адрес | `2001:db8::15` | ✅ cidr: `2001:db8::15 OK` | ✅ `2001:db8::15` |
 
 > [!NOTE]
 > `hash:`-карты Postfix не поддерживают CIDR-подсети, поэтому CIDR-записи (IPv4 и IPv6) попадают в отдельную `cidr:`-карту, которую Postfix перечитывает при каждом reload.
@@ -142,11 +116,11 @@ sudo ./add_whitelists.sh -n -f examples/whitelist.example.txt
 
 #### Управляемые файлы
 
-| Сервис   | Файл                                    | Тип карты |
-| -------- | --------------------------------------- | --------- |
-| Postfix  | `/etc/postfix/client_whitelist`         | `hash:`   |
-| Postfix  | `/etc/postfix/client_whitelist_cidr`    | `cidr:`   |
-| Postgrey | `/etc/postgrey/whitelist_clients.local` | —         |
+| Сервис | Файл | Тип карты |
+|---|---|---|
+| Postfix | `/etc/postfix/client_whitelist` | `hash:` |
+| Postfix | `/etc/postfix/client_whitelist_cidr` | `cidr:` |
+| Postgrey | `/etc/postgrey/whitelist_clients.local` | — |
 
 ### 🔌 Подключение к Postfix — `--setup` / `--check`
 
@@ -158,7 +132,7 @@ sudo add_whitelists.sh --setup
 
 Команда вставляет
 
-```text
+```
 check_client_access hash:/etc/postfix/client_whitelist,
 check_client_access cidr:/etc/postfix/client_whitelist_cidr
 ```
@@ -178,30 +152,67 @@ add_whitelists.sh --check    # exit 0 = подключено, exit 2 = нет
 
 ### 🚀 Быстрый старт
 
-#### Вариант 1: запуск из репозитория
+#### Шаг 1. Установка
 
 ```bash
 git clone https://github.com/Anton-Babaskin/miab-whitelists.git
 cd miab-whitelists
-
 chmod +x add_whitelists.sh
-sudo ./add_whitelists.sh example.com
 ```
 
-#### Вариант 2: глобальная установка
+Или глобально:
 
 ```bash
-git clone https://github.com/Anton-Babaskin/miab-whitelists.git
-cd miab-whitelists
-
 sudo install -m 0755 add_whitelists.sh /usr/local/bin/add_whitelists.sh
 ```
 
-После этого команду можно запускать из любой директории:
+#### Шаг 2. Подключить карты к Postfix (одноразово)
 
 ```bash
-sudo add_whitelists.sh example.com
+sudo ./add_whitelists.sh --setup
 ```
+
+Без этого шага whitelist-файлы существуют, но Postfix их **не читает** — токены `check_client_access` отсутствуют в `smtpd_recipient_restrictions`. `--setup` вставляет их перед `check_policy_service` (postgrey), чтобы доверенные клиенты обходили greylisting. Команда идемпотентна — повторный запуск ничего не ломает.
+
+> [!NOTE]
+> Postgrey (`whitelist_clients.local`) работает и без `--setup` — postgrey сам читает свой файл. `--setup` нужен только для Postfix-уровня.
+
+#### Шаг 3. Проверить подключение
+
+```bash
+./add_whitelists.sh --check
+```
+
+Ожидаемый вывод — три зелёных ✅:
+
+```
+🔎 Postfix integration status:
+   ✅ hash map present:  check_client_access hash:/etc/postfix/client_whitelist
+   ✅ cidr map present:  check_client_access cidr:/etc/postfix/client_whitelist_cidr
+   ✅ ordering OK: maps act before the greylisting policy service
+```
+
+#### Шаг 4. Добавить записи
+
+```bash
+# Создать файл с записями (один домен/IP/CIDR на строку)
+nano whitelists.txt
+
+# Dry run — посмотреть что будет добавлено, без изменений на сервере
+sudo ./add_whitelists.sh -n -f whitelists.txt
+
+# Применить
+sudo ./add_whitelists.sh -f whitelists.txt
+```
+
+Или одиночная запись без файла:
+
+```bash
+sudo ./add_whitelists.sh example.com
+```
+
+> [!WARNING]
+> После каждого обновления Mail-in-a-Box запускайте `sudo ./add_whitelists.sh --setup` — MIAB перегенерирует `smtpd_recipient_restrictions` и отцепляет карты.
 
 ### 🛠 Использование
 
@@ -226,7 +237,7 @@ add_whitelists.sh --version                              # показать ве
 
 ### 🎛 Справочник CLI
 
-```text
+```
 Использование:
   add_whitelists.sh [-n] ENTRY
   add_whitelists.sh [-n] -f FILE
@@ -266,7 +277,7 @@ add_whitelists.sh --version                              # показать ве
 
 Используйте одну запись на строку:
 
-```text
+```
 # Домены
 example.com
 mail.example.net
@@ -283,19 +294,19 @@ mail.example.net
 
 Обработчик:
 
-* игнорирует пустые строки;
-* игнорирует строки, начинающиеся с `#`;
-* удаляет пробелы по краям;
-* преобразует записи в нижний регистр;
-* сообщает о неподдерживаемых или некорректных записях;
-* пропускает уже существующие записи.
+- игнорирует пустые строки;
+- игнорирует строки, начинающиеся с `#`;
+- удаляет пробелы по краям;
+- преобразует записи в нижний регистр;
+- сообщает о неподдерживаемых или некорректных записях;
+- пропускает уже существующие записи.
 
 > [!NOTE]
 > Поддерживаемые типы записей: домены, IPv4/IPv6-адреса, IPv4/IPv6 CIDR-подсети. Одиночные IPv6-адреса попадают в `cidr:`-карту и матчатся как адрес полной длины.
 
 ### 🔄 Что происходит при запуске
 
-```text
+```
 Входные данные
   │
   ▼
@@ -336,7 +347,7 @@ mail.example.net
 
 Резервные копии имеют следующий формат:
 
-```text
+```
 /etc/postfix/client_whitelist.bak_YYYY-MM-DD_HHMMSS
 /etc/postfix/client_whitelist_cidr.bak_YYYY-MM-DD_HHMMSS
 /etc/postgrey/whitelist_clients.local.bak_YYYY-MM-DD_HHMMSS
@@ -378,7 +389,7 @@ sudo systemctl restart postgrey
 
 Если файл журнала удаётся подготовить, операции записываются в:
 
-```text
+```
 /var/log/add_whitelists.log
 ```
 
@@ -405,20 +416,20 @@ sudo add_whitelists.sh -n -f whitelist.txt
 
 Рекомендации:
 
-* проверяйте каждый домен, IP-адрес и диапазон;
-* храните корпоративные данные whitelist в приватном репозитории;
-* не публикуйте конфигурацию рабочей почтовой инфраструктуры;
-* используйте минимально необходимую CIDR-подсеть;
-* проверяйте `/var/log/add_whitelists.log`;
-* периодически проводите аудит обоих whitelist-файлов;
-* проверяйте резервные копии перед удалением старых записей.
+- проверяйте каждый домен, IP-адрес и диапазон;
+- храните корпоративные данные whitelist в приватном репозитории;
+- не публикуйте конфигурацию рабочей почтовой инфраструктуры;
+- используйте минимально необходимую CIDR-подсеть;
+- проверяйте `/var/log/add_whitelists.log`;
+- периодически проводите аудит обоих whitelist-файлов;
+- проверяйте резервные копии перед удалением старых записей.
 
 Этот репозиторий намеренно не содержит рабочего корпоративного whitelist.
 
 ### 🛟 Решение проблем
 
 | Симптом | Решение |
-| ------- | ------- |
+|---|---|
 | `ERROR: Run as root or with sudo` | Запустите через `sudo`. |
 | `File not found: ...` | Проверьте путь через `ls -lah`, затем передайте абсолютный путь в `-f`. |
 | Запись не была добавлена | Скорее всего, она уже существует — `grep -F "example.com" /etc/postfix/client_whitelist`. Также проверьте журнал. |
@@ -463,7 +474,7 @@ sudo yum install bind-utils    # RHEL / CentOS / Fedora
 
 ### Использование
 
-```text
+```
 Использование:
   refresh_cloud_senders.sh [-o OUTPUT] [-d EXISTING] [--apply] [-h]
 
@@ -508,7 +519,7 @@ sudo ./add_whitelists.sh -f new.txt
 Массив `PROVIDERS` в начале скрипта определяет, какие SPF-записи разворачиваются. По умолчанию:
 
 | Провайдер | SPF-домен |
-| --------- | --------- |
+|---|---|
 | Microsoft 365 / Exchange Online | `spf.protection.outlook.com` |
 | Google Workspace | `_spf.google.com` |
 | Amazon SES | `amazonses.com` |
@@ -531,7 +542,7 @@ PROVIDERS=(
 
 Диапазоны провайдеров меняются изредка, а не постоянно. Обычно достаточно квартального аудита:
 
-```cron
+```bash
 # Запуск 1-го числа каждого квартала с отправкой diff на ревью (без авто-применения)
 0 6 1 1,4,7,10 * /usr/local/bin/refresh_cloud_senders.sh -d /etc/postfix/client_whitelist -o /tmp/cloud_new.txt
 ```
@@ -572,7 +583,7 @@ sudo sync_whitelists.sh
 ### Справочник конфига
 
 | Переменная | По умолчанию | Значение |
-| ---------- | ------------ | -------- |
+|---|---|---|
 | `REPO_DIR` | — (обязательна) | Git-репозиторий с whitelist'ом |
 | `WHITELIST_FILE` | `whitelist.txt` | Файл записей внутри репозитория |
 | `ADD_SCRIPT` | автопоиск | Путь к `add_whitelists.sh` |
@@ -590,7 +601,7 @@ journalctl -u miab-whitelist-sync.service -n 50   # логи синхрониз�
 
 ## 📦 Структура репозитория
 
-```text
+```
 miab-whitelists/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/
@@ -622,7 +633,7 @@ miab-whitelists/
 ## 📋 Требования
 
 | Инструмент | Требования |
-| ---------- | ---------- |
+|---|---|
 | `add_whitelists.sh` | Bash, Debian/Ubuntu, Postfix, Postgrey, `postmap`, `systemctl`, root/`sudo` |
 | `refresh_cloud_senders.sh` | Bash, `dig` (dnsutils / bind-utils) — root не требуется |
 
@@ -635,11 +646,11 @@ miab-whitelists/
 
 ## 🔗 Связанные репозитории
 
-| Репозиторий                                                                                  | Назначение                                            |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| [`miab-whitelists`](https://github.com/Anton-Babaskin/miab-whitelists)                       | Универсальный обработчик whitelist                    |
-| [`mass-domain-miab-whitelist`](https://github.com/Anton-Babaskin/mass-domain-miab-whitelist) | Массовый импортёр готового whitelist                  |
-| [`miab-whitelist-installer`](https://github.com/Anton-Babaskin/miab-whitelist-installer)     | Автоматический установщик полного набора инструментов |
+| Репозиторий | Назначение |
+|---|---|
+| [`miab-whitelists`](https://github.com/Anton-Babaskin/miab-whitelists) | Универсальный обработчик whitelist |
+| [`mass-domain-miab-whitelist`](https://github.com/Anton-Babaskin/mass-domain-miab-whitelist) | Массовый импортёр готового whitelist |
+| [`miab-whitelist-installer`](https://github.com/Anton-Babaskin/miab-whitelist-installer) | Автоматический установщик полного набора инструментов |
 
 ---
 
@@ -654,9 +665,9 @@ bash -n refresh_cloud_senders.sh && shellcheck refresh_cloud_senders.sh
 
 Ознакомьтесь с файлами:
 
-* [CONTRIBUTING.md](./CONTRIBUTING.md)
-* [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-* [SECURITY.md](./SECURITY.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md)
 
 Никогда не добавляйте в задачи или Pull Request реальные корпоративные whitelist-данные, токены, почтовые журналы или сведения о приватной инфраструктуре.
 
@@ -664,13 +675,13 @@ bash -n refresh_cloud_senders.sh && shellcheck refresh_cloud_senders.sh
 
 ## 📜 История изменений
 
-История выпусков и важные изменения находятся в [CHANGELOG.md](./CHANGELOG.md).
+История выпусков и важные изменения находятся в [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## ⚖️ Лицензия
 
-Проект распространяется по [лицензии MIT](./LICENSE).
+Проект распространяется по [лицензии MIT](LICENSE).
 
 Copyright © 2025-2026 Anton Babaskin.
 
